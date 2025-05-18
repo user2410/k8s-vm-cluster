@@ -1,0 +1,40 @@
+version: '3'
+
+tasks:
+  dist:
+    desc: "Distribute encryption key to VMs"
+    sources:
+      - ./encryption-config.yaml
+    status:
+      - '! test -f ./encryption-config.yaml'
+    cmds:
+      - echo "Distributing encryption key to the master node..."
+      - |
+        echo "Extracting variable..."
+        MASTER_IP=$(grep 'master' ./scripts/local/hosts | awk '{print $1}')
+        echo "Extracted MASTER_IP: $MASTER_IP"
+
+        scp -i .vagrant/machines/master/virtualbox/private_key ./encryption-config.yaml vagrant@$MASTER_IP:/tmp/encryption-config.yaml
+
+        ssh -i .vagrant/machines/master/virtualbox/private_key vagrant@$MASTER_IP sudo mkdir -p /var/lib/kubernetes/
+        
+        ssh -i .vagrant/machines/master/virtualbox/private_key vagrant@$MASTER_IP sudo mv encryption-config.yaml /var/lib/kubernetes/
+  
+  gen:
+    desc: "Generate encryption key for securing data at rest"
+    cmds:
+      - |
+        ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64)
+        cat > ./encryption-config.yaml <<EOF
+        kind: EncryptionConfig
+        apiVersion: v1
+        resources:
+          - resources:
+              - secrets
+            providers:
+              - aescbc:
+                  keys:
+                    - name: key1
+                      secret: ${ENCRYPTION_KEY}
+              - identity: {}
+        EOF

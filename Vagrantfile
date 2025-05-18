@@ -1,0 +1,192 @@
+#######################################################################
+#   This part loads config to enable dynamically generated scripts to be executed on VM's #
+#######################################################################
+# Explicitly require the YAML module
+require 'yaml'
+require 'ipaddr'
+
+# Load the configuration file
+vbox_conf = YAML.load_file('./config.yaml')
+puts "Loaded configuration data: #{vbox_conf}"
+node_count = vbox_conf['NodeCount'].to_i
+
+def configure_node_ips(worker_count)
+  # Get host-only interface info from VBoxManage
+  def get_hostonly_network
+    info = `VBoxManage list hostonlyifs`
+    blocks = info.split("\n\n")
+    blocks.each do |block|
+      lines = block.lines.map(&:strip)
+      ip_line = lines.find { |l| l.start_with?("IPAddress:") }
+      mask_line = lines.find { |l| l.start_with?("NetworkMask:") }
+
+      next unless ip_line && mask_line
+
+      ip = ip_line.split(":")[1].strip
+      mask = mask_line.split(":")[1].strip
+
+      return [ip, mask] if ip != "0.0.0.0"
+    end
+
+    raise "No valid host-only network found"
+  end
+
+  ip, netmask = get_hostonly_network
+  ipaddr = IPAddr.new("#{ip}/#{netmask}")
+  network = ipaddr.to_range.first.to_s
+  prefix = ipaddr.prefix
+
+  def ip_at(base_ip, offset)
+    IPAddr.new(base_ip.to_i + offset, Socket::AF_INET).to_s
+  end
+
+  # Assign IPs
+  master_ip = IPAddr.new(network).succ.succ.to_s  # first usable IP
+  worker_ips = (1..worker_count).map { |i| ip_at(IPAddr.new(master_ip), i) }
+
+  puts "Master IP: #{master_ip}"
+  puts "Worker IPs: #{worker_ips.join(', ')}"
+
+  return [master_ip, worker_ips]
+end
+
+
+Vagrant.configure(2) do |config|
+  # Sync the scripts directory
+  config.vm.synced_folder "./scripts", "/vagrant/scripts", create: true
+  config.vm.synced_folder "./certs", "/vagrant/certs", create: true
+  config.vm.synced_folder "./kubeconfigs", "/vagrant/kubeconfigs", create: true
+  config.vm.synced_folder "./units", "/vagrant/units", create: true
+  config.vm.synced_folder "./configs", "/vagrant/configs", create: true
+  config.vm.provision "file", source: "./config.yaml", destination: "/home/vagrant/config.yaml"
+  
+  # Allocate IP addresses for the master and worker nodes
+  master_ip, worker_ips = configure_node_ips(node_count)
+
+  #######################################################################
+  ###  Generate the /etc/hosts file to be deployed on every node      ###
+  #######################################################################
+
+  local_hosts_path = "./scripts/local/hosts"
+  # Update the hosts file with configured IP addresses
+  File.open(local_hosts_path, 'w') do |file|
+    file.puts ''
+    file.puts "# Kubernetes Cluster Hosts"
+    file.puts ''
+
+    # Add master entry
+    file.puts "#{master_ip} master master.kubernetes.local"
+
+    # Add worker entries
+    if node_count >= 1
+      worker_ips.each_with_index do |worker_ip, index|
+        worker_hostname = "worker#{index + 1}"
+        file.puts "#{worker_ip} #{worker_hostname} #{worker_hostname}.kubernetes.local"
+      end
+    end
+
+    # Add ipv6 context
+    file.puts '# The following lines are desirable for IPv6 capable hosts'
+    file.puts ''
+    file.puts '::1     localhost ip6-localhost ip6-loopback'
+    file.puts 'ff02::1 ip6-allnodes'
+    file.puts 'ff02::2 ip6-allrouters'
+  end
+
+  #######################################################################
+  ##Generate the kubeadm init command with pre-configured IP addresses ##
+  #######################################################################
+
+  # local_script_path = "./scripts/local/kube_init_script.sh"
+  # File.open(local_script_path, 'w') do |file|
+  #   file.puts "#!/bin/bash"
+  #   file.puts ''
+  #   file.puts 'set -eux'
+  #   file.puts ''
+  #   file.puts 'echo "[TASK 1] Initialize Kubernetes Cluster"'
+  #   file.puts "sudo kubeadm init --apiserver-advertise-address=#{master_ip} --pod-network-cidr=#{vbox_conf['master']['pod_network_cidr']} >> kubeinit.log 2>/home/vagrant/init-error.log"
+  # end
+
+  #######################################################################
+  ##        Execute on each new VM the requirements.sh script          ##
+  #######################################################################
+
+  # Define the amount of time given to the machine to complete reboot
+  config.vm.boot_timeout = 600 # Set the boot timeout to 10 minutes
+
+  # Execute on each new machine the requirements.sh script to configure the system
+  config.vm.provision "shell", path: "./scripts/bootstrap.sh", args: node_count
+
+  #######################################################################
+  ##   Create and configure the Master node, and deploy the cluster   ###
+  #######################################################################
+
+  # Kubernetes Master
+  config.vm.define "master" do |master|
+    master.vm.box = vbox_conf['master']['box']
+    master.vm.hostname = "master"
+    master.vm.network "private_network", ip: master_ip
+    master.vm.provider "virtualbox" do |v|
+      v.name = "master"
+      v.memory = vbox_conf['master']['memory']
+      v.cpus = vbox_conf['master']['cpus']
+
+      # Enable nested virtualization if specified in the config file
+      if vbox_conf['master']['master_virt'].to_s.downcase == 'true'
+        v.customize ["modifyvm", :id, "--hwvirtex", "on"]
+        v.customize ["modifyvm", :id, "--nested-hw-virt", "on"]
+      end
+
+      # Create additional drives if defined in the config file
+      additional_storage_drives = vbox_conf['master']['additional_storage_drives']
+      if additional_storage_drives.to_i > 0 && additional_storage_drives.to_i < 10
+        Master_drives = (1..additional_storage_drives).to_a
+        Master_drives.each do |hd|
+          v.customize ['createhd', '--filename', "./volumes/master_disk#{hd}.vdi", '--variant', 'Standard', '--size', vbox_conf['worker']['storage_drives_size'] * 1024]
+          v.customize ['storageattach', :id, '--storagectl', 'SCSI', '--port', hd + 1, '--device', 0, '--type', 'hdd', '--medium', "./volumes/master_disk#{hd}.vdi"]
+        end
+      end
+    end
+    master.vm.provision "shell", inline: "sed -i 's/^127.0.0.1.*/127.0.0.1\t localhost master master.kubernetes.local/' /etc/hosts"
+    # master.vm.provision "shell", path: "./scripts/master.sh"
+    master.vm.box_download_insecure = true
+  end
+
+  #######################################################################
+  ###   Create and configure the worker nodes and join the cluster    ###
+  #######################################################################
+  
+  # Kubernetes nodes
+  if node_count >= 1
+    (1..node_count).each do |i|
+      config.vm.define "worker#{i}" do |worker|
+        worker.vm.box = vbox_conf['worker']['box']
+        worker.vm.hostname = "worker#{i}"
+        worker.vm.network "private_network", ip: worker_ips[i - 1]
+        worker.vm.provider "virtualbox" do |v|
+          v.name = "worker#{i}"
+          v.memory = vbox_conf['worker']['memory']
+          v.cpus = vbox_conf['worker']['cpus']
+
+          if vbox_conf['worker']['worker_virt'].to_s.downcase == 'true'
+            v.customize ["modifyvm", :id, "--hwvirtex", "on"]
+            v.customize ["modifyvm", :id, "--nested-hw-virt", "on"]
+          end
+
+          # Create additional drives if defined in the config file
+          additional_storage_drives = vbox_conf['worker']['additional_storage_drives']
+          if additional_storage_drives.to_i > 0 && additional_storage_drives.to_i < 10
+            Worker_drives = (1..additional_storage_drives).to_a
+            Worker_drives.each do |hd|
+              v.customize ['createhd', '--filename', "./volumes/worker#{i}_disk#{hd}.vdi", '--variant', 'Standard', '--size', vbox_conf['worker']['storage_drives_size'] * 1024]
+              v.customize ['storageattach', :id, '--storagectl', 'SCSI', '--port', hd + 1, '--device', 0, '--type', 'hdd', '--medium', "./volumes/worker#{i}_disk#{hd}.vdi"]
+            end
+          end
+        end
+        worker.vm.provision "shell", inline: "sed -i 's/^127.0.0.1.*/127.0.0.1\t localhost worker#{i} worker#{i}.kubernetes.local/' /etc/hosts"
+        # worker.vm.provision "shell", path: "./scripts/worker.sh"
+        worker.vm.box_download_insecure = true
+      end
+    end
+  end
+end

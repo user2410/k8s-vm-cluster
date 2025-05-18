@@ -1,0 +1,62 @@
+version: '3'
+
+tasks:
+  start:all:
+    desc: "Build / Turn on VMs for K8s cluster"
+    status:
+      - '! which vagrant'
+      - '! test -f Vagrantfile'
+    cmds:
+      - vagrant up
+      - vagrant global-status
+
+  start:single:
+    desc: "Build / Turn on a single VM for K8s cluster"
+    vars:
+      VM_NAME: '{{.VM_NAME | default "master"}}'
+    status:
+      - '! which vagrant'
+      - '! test -f Vagrantfile'
+    cmds:
+      - vagrant up {{.VM_NAME}}
+      - vagrant status {{.VM_NAME}}
+
+  suspend:all:
+    desc: "Suspend VMs for K8s cluster"
+    status:
+      - '! which vagrant'
+      - '! test -f Vagrantfile'
+    cmds:
+      - vagrant suspend
+      - vagrant global-status
+  
+  suspend:single:
+    desc: "Suspend a single VM for K8s cluster"
+    vars:
+      VM_NAME: '{{.VM_NAME | default "master"}}'
+    status:
+      - '! which vagrant'
+      - '! test -f Vagrantfile'
+    cmds:
+      - vagrant suspend {{.VM_NAME}}
+      - vagrant status {{.VM_NAME}}
+  
+  destroy:all:
+    desc: "Destroy VMs for K8s cluster"
+    status:
+      - '! which vagrant'
+      - '! test -f Vagrantfile'
+    cmds:
+      - vagrant destroy -f
+      - vagrant global-status
+
+  destroy:single:
+    desc: "Destroy a single VM for K8s cluster"
+    vars:
+      VM_NAME: '{{.VM_NAME | default "master"}}'
+    status:
+      - '! which vagrant'
+      - '! test -f Vagrantfile'
+    cmds:
+      - vagrant destroy -f {{.VM_NAME}}
+      - vagrant status {{.VM_NAME}}

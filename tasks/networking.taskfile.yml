@@ -1,0 +1,17 @@
+version: '3'
+
+tasks:
+  config:workers:
+    desc: "Configure networking for worker nodes"
+    cmds:
+  
+  config:worker:
+    internal: true
+    vars:
+      WORKER: '{{.WORKER}}'
+    cmds:
+      - for: ['worker1', 'worker2']
+        cmd: |
+          echo "Extracting variable..."
+          WORKER_IP=$(grep '{{.ITEM}}' ./scripts/local/hosts | awk '{print $1}')
+          echo "Extracted WORKER_IP: $WORKER_IP"

@@ -3,7 +3,7 @@
   #######################################################################
 
   # How many worker nodes to deploy in addition to the master node
-NodeCount: 2
+WorkerNodeCount: 2
 
 master:
   #######################################################################
@@ -20,10 +20,8 @@ master:
   #     set the internal Kubernetes pod Network plugin and  CIDR        #
   #######################################################################
   # pod_network_plugin: Cilium              # Choose between Weave, Flannel or Cilium. Write without quotes.
-  pod_network_cidr: "10.96.0.0/16"       
+  pod_network_cidr: "10.96.0.0/16"
   service_network_cidr: "10.32.0.0/24" 
-
-
 
 worker:
   #######################################################################

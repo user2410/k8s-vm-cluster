@@ -4,6 +4,7 @@ tasks:
   dist:
     desc: "Distribute encryption key to VMs"
     sources:
+      - ./machines.txt
       - ./encryption-config.yaml
     status:
       - '! test -f ./encryption-config.yaml'
@@ -11,7 +12,7 @@ tasks:
       - echo "Distributing encryption key to the master node..."
       - |
         echo "Extracting variable..."
-        MASTER_IP=$(grep 'master' ./scripts/local/hosts | awk '{print $1}')
+        MASTER_IP=$(grep 'master' ./machines.txt | awk '{print $1}')
         echo "Extracted MASTER_IP: $MASTER_IP"
 
         scp -i .vagrant/machines/master/virtualbox/private_key ./encryption-config.yaml vagrant@$MASTER_IP:/tmp/encryption-config.yaml

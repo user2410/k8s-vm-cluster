@@ -8,8 +8,10 @@ require 'ipaddr'
 # Load the configuration file
 vbox_conf = YAML.load_file('./config.yaml')
 puts "Loaded configuration data: #{vbox_conf}"
-node_count = vbox_conf['NodeCount'].to_i
+worker_nodes_count = vbox_conf['WorkerNodeCount'].to_i
+pod_network_cidr = vbox_conf['master']['pod_network_cidr']
 
+# Configure the number of worker nodes based on configuration
 def configure_node_ips(worker_count)
   # Get host-only interface info from VBoxManage
   def get_hostonly_network
@@ -44,12 +46,25 @@ def configure_node_ips(worker_count)
   master_ip = IPAddr.new(network).succ.succ.to_s  # first usable IP
   worker_ips = (1..worker_count).map { |i| ip_at(IPAddr.new(master_ip), i) }
 
-  puts "Master IP: #{master_ip}"
-  puts "Worker IPs: #{worker_ips.join(', ')}"
-
   return [master_ip, worker_ips]
 end
 
+# Generate subnets for worker nodes based on the cluster CIDR
+# This function generates subnets for each worker node based on the provided cluster CIDR
+# It assumes that the cluster CIDR is in the format "x.x.x.x/16"
+# and generates subnets in the format "x.x.x.0/24", "x.x.x.1/24", etc.
+def generate_subnets(cluster_cidr, num_workers)
+  base = IPAddr.new(cluster_cidr)
+  subnets = []
+
+  (0...num_workers).each do |i|
+    # Calculate the subnet offset within the /16 range
+    subnet_ip = IPAddr.new((base.to_i + (i << 8)), Socket::AF_INET)
+    subnets << "#{subnet_ip.to_s}/24"
+  end
+
+  subnets
+end
 
 Vagrant.configure(2) do |config|
   # Sync the scripts directory
@@ -61,13 +76,24 @@ Vagrant.configure(2) do |config|
   config.vm.provision "file", source: "./config.yaml", destination: "/home/vagrant/config.yaml"
   
   # Allocate IP addresses for the master and worker nodes
-  master_ip, worker_ips = configure_node_ips(node_count)
+  master_ip, worker_ips = configure_node_ips(worker_nodes_count)
+  subnets = generate_subnets(pod_network_cidr, worker_nodes_count)
 
-  #######################################################################
-  ###  Generate the /etc/hosts file to be deployed on every node      ###
-  #######################################################################
+  # Verify the IP addresses
+  puts "Master IP: #{master_ip}"
+  puts "Worker IPs: #{worker_ips.join(', ')}"
 
-  local_hosts_path = "./scripts/local/hosts"
+  # Verify the subnets
+  puts "Allocated subnets:"
+  subnets.each_with_index do |subnet, index|
+    puts "Node worker#{index + 1}: #{subnet}"
+  end
+
+  ##########################################################################################
+  ###  Generate the /etc/hosts file to be deployed on every node and host manifest file  ###
+  ##########################################################################################
+
+  local_hosts_path = "./machines.txt"
   # Update the hosts file with configured IP addresses
   File.open(local_hosts_path, 'w') do |file|
     file.puts ''
@@ -78,34 +104,34 @@ Vagrant.configure(2) do |config|
     file.puts "#{master_ip} master master.kubernetes.local"
 
     # Add worker entries
-    if node_count >= 1
+    if worker_nodes_count >= 1
       worker_ips.each_with_index do |worker_ip, index|
         worker_hostname = "worker#{index + 1}"
         file.puts "#{worker_ip} #{worker_hostname} #{worker_hostname}.kubernetes.local"
       end
     end
 
-    # Add ipv6 context
-    file.puts '# The following lines are desirable for IPv6 capable hosts'
-    file.puts ''
-    file.puts '::1     localhost ip6-localhost ip6-loopback'
-    file.puts 'ff02::1 ip6-allnodes'
-    file.puts 'ff02::2 ip6-allrouters'
+    # # Add ipv6 context
+    # file.puts '# The following lines are desirable for IPv6 capable hosts'
+    # file.puts ''
+    # file.puts '::1     localhost ip6-localhost ip6-loopback'
+    # file.puts 'ff02::1 ip6-allnodes'
+    # file.puts 'ff02::2 ip6-allrouters'
   end
 
-  #######################################################################
-  ##Generate the kubeadm init command with pre-configured IP addresses ##
-  #######################################################################
+  local_hosts_path = "./machines.txt"
+  File.open(local_hosts_path, 'w') do |file|
+    # Write IP address, hostname, FQDN and Pod Subnet CIDR
+    file.puts "#{master_ip} master master.kubernetes.local #{pod_network_cidr}"
 
-  # local_script_path = "./scripts/local/kube_init_script.sh"
-  # File.open(local_script_path, 'w') do |file|
-  #   file.puts "#!/bin/bash"
-  #   file.puts ''
-  #   file.puts 'set -eux'
-  #   file.puts ''
-  #   file.puts 'echo "[TASK 1] Initialize Kubernetes Cluster"'
-  #   file.puts "sudo kubeadm init --apiserver-advertise-address=#{master_ip} --pod-network-cidr=#{vbox_conf['master']['pod_network_cidr']} >> kubeinit.log 2>/home/vagrant/init-error.log"
-  # end
+    # Add worker entries
+    if worker_nodes_count >= 1
+      worker_ips.each_with_index do |worker_ip, index|
+        worker_hostname = "worker#{index + 1}"
+        file.puts "#{worker_ip} #{worker_hostname} #{worker_hostname}.kubernetes.local #{subnets[index]}"
+      end
+    end
+  end
 
   #######################################################################
   ##        Execute on each new VM the requirements.sh script          ##
@@ -115,7 +141,7 @@ Vagrant.configure(2) do |config|
   config.vm.boot_timeout = 600 # Set the boot timeout to 10 minutes
 
   # Execute on each new machine the requirements.sh script to configure the system
-  config.vm.provision "shell", path: "./scripts/bootstrap.sh", args: node_count
+  config.vm.provision "shell", path: "./scripts/bootstrap.sh", args: worker_nodes_count
 
   #######################################################################
   ##   Create and configure the Master node, and deploy the cluster   ###
@@ -157,8 +183,8 @@ Vagrant.configure(2) do |config|
   #######################################################################
   
   # Kubernetes nodes
-  if node_count >= 1
-    (1..node_count).each do |i|
+  if worker_nodes_count >= 1
+    (1..worker_nodes_count).each do |i|
       config.vm.define "worker#{i}" do |worker|
         worker.vm.box = vbox_conf['worker']['box']
         worker.vm.hostname = "worker#{i}"

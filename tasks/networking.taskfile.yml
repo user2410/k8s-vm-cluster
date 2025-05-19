@@ -1,17 +1,72 @@
 version: '3'
 
 tasks:
-  config:workers:
-    desc: "Configure networking for worker nodes"
-    cmds:
-  
-  config:worker:
-    internal: true
+  config:pod_networking:
+    desc: |
+      1) On the master node, add a route to each worker subnet  
+      2) On each worker node, add routes to every *other* worker subnet
     vars:
-      WORKER: '{{.WORKER}}'
+      WORKER_COUNT:
+        sh: yq -r '.WorkerNodeCount' ./config.yaml
+      MASTER_IP:
+        sh: awk '/ master /{print $1}' ./machines.txt
+      WORKER_IPS:
+        sh: awk '/ worker[0-9]+ /{print $1}' ./machines.txt | xargs
+      WORKER_SUBNETS:
+        sh: awk '/ worker[0-9]+ /{print $4}' ./machines.txt | xargs
     cmds:
-      - for: ['worker1', 'worker2']
-        cmd: |
-          echo "Extracting variable..."
-          WORKER_IP=$(grep '{{.ITEM}}' ./scripts/local/hosts | awk '{print $1}')
-          echo "Extracted WORKER_IP: $WORKER_IP"
+      # For each worker node, add a route to the worker subnet on the master node
+      - |
+        for i in $(seq 1 {{.WORKER_COUNT}}); do
+          WORKER_IP=$(echo {{.WORKER_IPS}} | cut -d ' ' -f $i)
+          WORKER_SUBNET=$(echo {{.WORKER_SUBNETS}} | cut -d ' ' -f $i)
+          echo "Adding route to worker subnet $WORKER_SUBNET on master node..."
+          ssh -i .vagrant/machines/master/virtualbox/private_key \
+            vagrant@{{.MASTER_IP}} "sudo ip route add $WORKER_SUBNET via $WORKER_IP"
+        done
+      # For each worker node, add routes to every *other* worker subnet
+      - |
+        for i in $(seq 1 {{.WORKER_COUNT}}); do
+          for j in $(seq 1 {{.WORKER_COUNT}}); do
+            if [ $i -ne $j ]; then
+              WORKERI_IP=$(echo {{.WORKER_IPS}} | cut -d ' ' -f $i)
+              WORKERJ_IP=$(echo {{.WORKER_IPS}} | cut -d ' ' -f $j)
+              WORKERJ_SUBNET=$(echo {{.WORKER_SUBNETS}} | cut -d ' ' -f $j)
+              echo "Adding route to worker$j subnet $WORKERJ_SUBNET on worker$i..."
+              ssh -i .vagrant/machines/worker$i/virtualbox/private_key \
+                vagrant@$WORKERI_IP "sudo ip route add $WORKERJ_SUBNET via $WORKERJ_IP"
+            fi
+          done
+        done
+
+  config:kube-proxy:
+    desc: "Configure kube-proxy"
+    status:
+      - |
+        if command -v yq >/dev/null 2>&1; then
+          exit 1
+        fi
+        exit 0
+    cmds:
+      - |
+        POD_CIDR=$(yq '.master.pod_network_cidr' config.yaml)
+        echo "Extracted POD_CIDR: $POD_CIDR"
+        
+        sed "s#{POD_CIDR}#${POD_CIDR}#g" ./configs/kube-proxy-config.template.yaml > ./configs/kube-proxy-config.yaml
+
+  config:kube-apiserver:
+    desc: "Configure kube-apiserver"
+    sources:
+      - ./machines.txt
+    status:
+      - |
+        if command -v yq >/dev/null 2>&1; then
+          exit 1
+        fi
+        exit 0
+    cmds:
+      - |
+        MASTER_IP=$(grep 'master' ./machines.txt | awk '{print $1}')
+        echo "Extracted MASTER_IP: $MASTER_IP"
+
+        sed "s#{MASTER_IP}#${MASTER_IP}#g" ./units/kube-apiserver.template.service > ./units/kube-apiserver.service

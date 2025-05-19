@@ -20,3 +20,5 @@ units/kube-apiserver.service
 units/kube-controller-manager.service
 
 .vscode
+
+machines.txt

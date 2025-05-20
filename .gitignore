@@ -22,3 +22,5 @@ units/kube-controller-manager.service
 .vscode
 
 machines.txt
+
+configs/10-bridge.worker*.conf

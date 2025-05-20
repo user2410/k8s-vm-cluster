@@ -9,6 +9,14 @@ tasks:
     cmds:
       - vagrant up
       - vagrant global-status
+      - task: register-hosts
+
+  register-hosts:
+    desc: "Register VMs in /etc/hosts"
+    cmds:
+      - sudo cp /etc/hosts /etc/hosts.bak
+      - '{ echo ""; echo "# IP addresses of vms running K8s cluster"; } | sudo tee -a /etc/hosts > /dev/null'
+      - awk '{print $1, $2, $3}' machines.txt | sudo tee -a /etc/hosts > /dev/null
 
   start:single:
     desc: "Build / Turn on a single VM for K8s cluster"
@@ -49,6 +57,22 @@ tasks:
     cmds:
       - vagrant destroy -f
       - vagrant global-status
+      - task: unregister-hosts
+
+  unregister-hosts:
+    desc: "Remove K8s VM entries from /etc/hosts"
+    cmds:
+      - sudo cp /etc/hosts /etc/hosts.bak
+      # Read entries from machines.txt and remove matching lines from /etc/hosts
+      - |
+        while read -r ip hostname fqdn _; do
+          if [ -n "$ip" ] && [ -n "$hostname" ] && [ -n "$fqdn" ]; then
+            sudo sed -i "/^$ip $hostname $fqdn$/d" /etc/hosts
+          fi
+        done < machines.txt
+      # Also remove the comment line
+      - sudo sed -i '/^# IP addresses of vms running K8s cluster$/d' /etc/hosts
+      - echo "Removed K8s cluster entries from /etc/hosts"
 
   destroy:single:
     desc: "Destroy a single VM for K8s cluster"

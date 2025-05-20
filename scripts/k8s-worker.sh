@@ -87,9 +87,10 @@ tar -xvf /tmp/containerd-$CONTAINERD_VER-linux-${ARCH}.tar.gz \
     --strip-components 1 \
     -C /tmp/
 
-mv /tmp/{crictl,kube-proxy,kubelet,kubectl,runc.$ARCH} \
+mv /tmp/{crictl,kube-proxy,kubelet,kubectl} \
     /usr/local/bin/
-chmod +x /usr/local/bin/{crictl,kube-proxy,kubelet,kubectl,runc.$ARCH}
+mv /tmp/runc.$ARCH /usr/local/bin/runc
+chmod +x /usr/local/bin/{crictl,kube-proxy,kubelet,kubectl,runc}
 mv /tmp/{containerd,containerd-shim-runc-v2,containerd-stress} /bin/
 chmod +x /bin/{containerd,containerd-shim-runc-v2,containerd-stress}
 
@@ -98,15 +99,11 @@ chmod +x /bin/{containerd,containerd-shim-runc-v2,containerd-stress}
 
 ## Create the `bridge` network configuration file:
 # cp $CONFIG_ORIGINAL_DIR/{10-bridge.conf,99-loopback.conf} /etc/cni/net.d/
-cp $CONFIG_ORIGINAL_DIR/99-loopback.conf /etc/cni/net.d/
-
 HOSTNAME=$(hostname -s)
 
-sed "s|SUBNET|$HOSTNAME|g" \
-  $CONFIG_ORIGINAL_DIR/10-bridge.conf > /etc/cni/net.d/10-bridge.conf
-
-sed "s|SUBNET|$HOSTNAME|g" \
-  $CONFIG_ORIGINAL_DIR/kubelet-config.yaml > /etc/cni/net.d/kubelet-config.yaml
+cp $CONFIG_ORIGINAL_DIR/99-loopback.conf /etc/cni/net.d/
+cp $CONFIG_ORIGINAL_DIR/10-bridge.$HOSTNAME.conf /etc/cni/net.d/10-bridge.conf
+cp $CONFIG_ORIGINAL_DIR/kubelet-config.yaml /etc/cni/net.d/kubelet-config.yaml
 
 ## To ensure network traffic crossing the CNI `bridge` network is processed by `iptables`, 
 ## load and configure the `br-netfilter` kernel module

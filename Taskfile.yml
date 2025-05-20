@@ -8,19 +8,6 @@ includes:
   vms: tasks/vms.taskfile.yml
 
 tasks:
-  verify:control-plane:
-    desc: "Verify that Kubernetes control plane is up and running."
-    sources:
-      - ./machines.txt
-    cmds:
-      - |
-        echo "Extracting variable..."
-        MASTER_IP=$(grep 'master' ./machines.txt | awk '{print $1}')
-        echo "Extracted MASTER_IP: $MASTER_IP"
-
-        curl --cacert ./certs/ca.crt \
-          https://$MASTER_IP:6443/version
-
   build:
     desc: "Build / Turn on VMs for K8s cluster"
     sources:
@@ -29,6 +16,8 @@ tasks:
       - task: vms:start:all
       - task: networking:config:kube-proxy
       - task: networking:config:kube-apiserver
+      - task: networking:config:pod-networking
+      - task: networking:config:cni
       - task: certificates:gen:all
       - |
         echo "Running installation scripts on master node..."

@@ -1,19 +1,20 @@
 version: '3'
 
+vars:
+  WORKER_COUNT:
+    sh: yq -r '.WorkerNodeCount' ./config.yaml
+  MASTER_IP:
+    sh: awk '/ master /{print $1}' ./machines.txt
+  WORKER_IPS:
+    sh: awk '/ worker[0-9]+ /{print $1}' ./machines.txt | xargs
+  WORKER_SUBNETS:
+    sh: awk '/ worker[0-9]+ /{print $4}' ./machines.txt | xargs
+
 tasks:
-  config:pod_networking:
+  config:pod-networking:
     desc: |
       1) On the master node, add a route to each worker subnet  
       2) On each worker node, add routes to every *other* worker subnet
-    vars:
-      WORKER_COUNT:
-        sh: yq -r '.WorkerNodeCount' ./config.yaml
-      MASTER_IP:
-        sh: awk '/ master /{print $1}' ./machines.txt
-      WORKER_IPS:
-        sh: awk '/ worker[0-9]+ /{print $1}' ./machines.txt | xargs
-      WORKER_SUBNETS:
-        sh: awk '/ worker[0-9]+ /{print $4}' ./machines.txt | xargs
     cmds:
       # For each worker node, add a route to the worker subnet on the master node
       - |
@@ -70,3 +71,22 @@ tasks:
         echo "Extracted MASTER_IP: $MASTER_IP"
 
         sed "s#{MASTER_IP}#${MASTER_IP}#g" ./units/kube-apiserver.template.service > ./units/kube-apiserver.service
+
+  config:cni:
+    desc: "Configure CNI"
+    status:
+      - |
+        if command -v yq >/dev/null 2>&1; then
+          exit 1
+        fi
+        exit 0
+    cmds:
+      - |
+        for i in $(seq 1 {{.WORKER_COUNT}}); do
+          WORKER_IP=$(echo {{.WORKER_IPS}} | cut -d ' ' -f $i)
+          WORKER_SUBNET=$(echo {{.WORKER_SUBNETS}} | cut -d ' ' -f $i)
+          WORKER_HOSTNAME=worker$i
+
+          sed "s|SUBNET|$WORKER_SUBNET|g" \
+            ./configs/10-bridge.conf > ./configs/10-bridge.$WORKER_HOSTNAME.conf
+        done

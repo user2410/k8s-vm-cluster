@@ -1,0 +1,21 @@
+version: '3'
+
+tasks:
+  test:smoke:
+    desc: "Test if the control plane is up and running"
+    sources:
+      - ./machines.txt
+    cmds:
+  
+  verify:control-plane:
+    desc: "Verify that Kubernetes control plane is up and running."
+    sources:
+      - ./machines.txt
+    cmds:
+      - |
+        echo "Extracting variable..."
+        MASTER_IP=$(grep 'master' ./machines.txt | awk '{print $1}')
+        echo "Extracted MASTER_IP: $MASTER_IP"
+
+        curl --cacert ./certs/ca.crt \
+          https://$MASTER_IP:6443/version

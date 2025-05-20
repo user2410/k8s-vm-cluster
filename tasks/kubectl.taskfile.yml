@@ -5,7 +5,7 @@ tasks:
     desc: "Configure kubectl"
     vars:
       K8S_CLUSTER_NAME: '{{.K8S_CLUSTER_NAME | default "k8s-cluster"}}'
-      CERT_ORIGINAL_DIR: "/vagrant/certs"
+      CERT_ORIGINAL_DIR: "./certs"
     status:
       - |
         if command -v kubectl >/dev/null 2>&1; then
@@ -20,7 +20,7 @@ tasks:
         kubectl config set-cluster {{.K8S_CLUSTER_NAME}} \
             --certificate-authority={{.CERT_ORIGINAL_DIR}}/ca.crt \
             --embed-certs=true \
-            --server=https://$MASTER_IP:6443
+            --server=https://master.kubernetes.local:6443
       - |
         kubectl config set-credentials admin \
           --client-certificate={{.CERT_ORIGINAL_DIR}}/admin.crt \

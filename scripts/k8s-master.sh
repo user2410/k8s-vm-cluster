@@ -4,9 +4,12 @@ set -eux
 
 K8S_VER=v1.33.1
 ARCH=$(dpkg --print-architecture)
-CONFIG_ORIGINAL_DIR=/vagrant/configs
-KUBECONFIG_ORIGINAL_DIR=/vagrant/kubeconfigs
-UNIT_ORIGINAL_DIR=/vagrant/units
+HOME_CONFIG=/home/vagrant/k8sconfigs
+CERT_DIR=$HOME_CONFIG/certs
+CONFIG_DIR=$HOME_CONFIG/configs
+KUBECONFIG_DIR=$HOME_CONFIG/kubeconfigs
+UNIT_DIR=$HOME_CONFIG/units
+
 
 # Install Kubernetes components
 
@@ -33,36 +36,36 @@ mkdir -p /etc/kubernetes/config
 ## Configure the Kubernetes API Server
 mkdir -p /var/lib/kubernetes/
 
-cp /vagrant/certs/{ca.crt,ca.key,kube-api-server.key,kube-api-server.crt,service-accounts.key,service-accounts.crt} \
+cp $CERT_DIR/{ca.crt,ca.key,kube-api-server.key,kube-api-server.crt,service-accounts.key,service-accounts.crt} \
   /var/lib/kubernetes/
 
 ### Generate a random encryption key
 ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64)
 
-sed "s|{ENCRYPTION_KEY}|$ENCRYPTION_KEY|g" $CONFIG_ORIGINAL_DIR/encryption-config.yaml > /var/lib/kubernetes/encryption-config.yaml
+sed "s|{ENCRYPTION_KEY}|$ENCRYPTION_KEY|g" $CONFIG_DIR/encryption-config.yaml > /var/lib/kubernetes/encryption-config.yaml
 
-cp $UNIT_ORIGINAL_DIR/kube-apiserver.service \
+cp $UNIT_DIR/kube-apiserver.service \
   /etc/systemd/system/kube-apiserver.service
 
 ## Configure the Kubernetes Controller Manager
 
 ### Move the `kube-controller-manager` kubeconfig into place:
-cp $KUBECONFIG_ORIGINAL_DIR/kube-controller-manager.kubeconfig /var/lib/kubernetes/
+cp $KUBECONFIG_DIR/kube-controller-manager.kubeconfig /var/lib/kubernetes/
 
 ### Create the `kube-controller-manager.service` systemd unit file:
-cp $UNIT_ORIGINAL_DIR/kube-controller-manager.service /etc/systemd/system/
+cp $UNIT_DIR/kube-controller-manager.service /etc/systemd/system/
 
 
 ## Configure the Kubernetes Scheduler
 
 ### Move the `kube-scheduler` kubeconfig into place:
-cp $KUBECONFIG_ORIGINAL_DIR/kube-scheduler.kubeconfig /var/lib/kubernetes/
+cp $KUBECONFIG_DIR/kube-scheduler.kubeconfig /var/lib/kubernetes/
 
 ### Create the `kube-scheduler.yaml` configuration file:
-cp $CONFIG_ORIGINAL_DIR/kube-scheduler.yaml /etc/kubernetes/config/
+cp $CONFIG_DIR/kube-scheduler.yaml /etc/kubernetes/config/
 
 ### Create the `kube-scheduler.service` systemd unit file:
-cp $UNIT_ORIGINAL_DIR/kube-scheduler.service /etc/systemd/system/
+cp $UNIT_DIR/kube-scheduler.service /etc/systemd/system/
 
 ## Start the Controller Services
 
@@ -93,7 +96,7 @@ done
 ### At this point the Kubernetes control plane components should be up and running. 
 ### Verify this using the `kubectl` command line tool:
 kubectl cluster-info \
-  --kubeconfig $KUBECONFIG_ORIGINAL_DIR/admin.kubeconfig
+  --kubeconfig $KUBECONFIG_DIR/admin.kubeconfig
 
 
 ## RBAC for Kubelet Authorization
@@ -107,5 +110,5 @@ kubectl cluster-info \
 
 
 ### Create the `system:kube-apiserver-to-kubelet` [ClusterRole](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#role-and-clusterrole) with permissions to access the Kubelet API and perform most common tasks associated with managing pods:
-kubectl apply -f $CONFIG_ORIGINAL_DIR/kube-apiserver-to-kubelet.yaml \
-  --kubeconfig $KUBECONFIG_ORIGINAL_DIR/admin.kubeconfig
+kubectl apply -f $CONFIG_DIR/kube-apiserver-to-kubelet.yaml \
+  --kubeconfig $KUBECONFIG_DIR/admin.kubeconfig

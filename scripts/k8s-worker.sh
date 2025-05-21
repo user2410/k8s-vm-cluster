@@ -3,10 +3,10 @@
 set -eux
 
 ARCH=$(dpkg --print-architecture)
-CERT_ORIGINAL_DIR=/vagrant/certs
-CONFIG_ORIGINAL_DIR=/vagrant/configs
-KUBECONFIG_ORIGINAL_DIR=/vagrant/kubeconfigs
-UNIT_ORIGINAL_DIR=/vagrant/units
+CERT_DIR=/home/vagrant/k8sconfigs/certs
+CONFIG_DIR=/home/vagrant/k8sconfigs/configs
+KUBECONFIG_DIR=/home/vagrant/k8sconfigs/kubeconfigs
+UNIT_DIR=/home/vagrant/k8sconfigs/units
 
 # Install the OS dependencies
 apt-get update
@@ -98,12 +98,12 @@ chmod +x /bin/{containerd,containerd-shim-runc-v2,containerd-stress}
 # Configure CNI Networking
 
 ## Create the `bridge` network configuration file:
-# cp $CONFIG_ORIGINAL_DIR/{10-bridge.conf,99-loopback.conf} /etc/cni/net.d/
+# cp $CONFIG_DIR/{10-bridge.conf,99-loopback.conf} /etc/cni/net.d/
 HOSTNAME=$(hostname -s)
 
-cp $CONFIG_ORIGINAL_DIR/99-loopback.conf /etc/cni/net.d/
-cp $CONFIG_ORIGINAL_DIR/10-bridge.$HOSTNAME.conf /etc/cni/net.d/10-bridge.conf
-cp $CONFIG_ORIGINAL_DIR/kubelet-config.yaml /etc/cni/net.d/kubelet-config.yaml
+cp $CONFIG_DIR/99-loopback.conf /etc/cni/net.d/
+cp $CONFIG_DIR/10-bridge.$HOSTNAME.conf /etc/cni/net.d/10-bridge.conf
+cp $CONFIG_DIR/kubelet-config.yaml /etc/cni/net.d/kubelet-config.yaml
 
 ## To ensure network traffic crossing the CNI `bridge` network is processed by `iptables`, 
 ## load and configure the `br-netfilter` kernel module
@@ -120,24 +120,24 @@ cp $CONFIG_ORIGINAL_DIR/kubelet-config.yaml /etc/cni/net.d/kubelet-config.yaml
 
 ## Install the `containerd` configuration files:
 mkdir -p /etc/containerd/
-cp $CONFIG_ORIGINAL_DIR/containerd-config.toml /etc/containerd/config.toml
-cp $UNIT_ORIGINAL_DIR/containerd.service /etc/systemd/system/
+cp $CONFIG_DIR/containerd-config.toml /etc/containerd/config.toml
+cp $UNIT_DIR/containerd.service /etc/systemd/system/
 
 
 # Configure the Kubelet
 
 ## Create the `kubelet-config.yaml` configuration file:
-cp $CONFIG_ORIGINAL_DIR/kubelet-config.yaml /var/lib/kubelet/
-cp $KUBECONFIG_ORIGINAL_DIR/$HOSTNAME.kubeconfig /var/lib/kubelet/kubeconfig
-cp $CERT_ORIGINAL_DIR/ca.crt /var/lib/kubelet/
-cp $CERT_ORIGINAL_DIR/$HOSTNAME.crt /var/lib/kubelet/kubelet.crt
-cp $CERT_ORIGINAL_DIR/$HOSTNAME.key /var/lib/kubelet/kubelet.key
-cp $UNIT_ORIGINAL_DIR/kubelet.service /etc/systemd/system/
+cp $CONFIG_DIR/kubelet-config.yaml /var/lib/kubelet/
+cp $KUBECONFIG_DIR/$HOSTNAME.kubeconfig /var/lib/kubelet/kubeconfig
+cp $CERT_DIR/ca.crt /var/lib/kubelet/
+cp $CERT_DIR/$HOSTNAME.crt /var/lib/kubelet/kubelet.crt
+cp $CERT_DIR/$HOSTNAME.key /var/lib/kubelet/kubelet.key
+cp $UNIT_DIR/kubelet.service /etc/systemd/system/
 
 
 # Configure the Kubernetes Proxy
-cp $CONFIG_ORIGINAL_DIR/kube-proxy-config.yaml $KUBECONFIG_ORIGINAL_DIR/kube-proxy.kubeconfig /var/lib/kube-proxy/
-cp $UNIT_ORIGINAL_DIR/kube-proxy.service /etc/systemd/system/
+cp $CONFIG_DIR/kube-proxy-config.yaml $KUBECONFIG_DIR/kube-proxy.kubeconfig /var/lib/kube-proxy/
+cp $UNIT_DIR/kube-proxy.service /etc/systemd/system/
 
 
 # Start the Worker Services

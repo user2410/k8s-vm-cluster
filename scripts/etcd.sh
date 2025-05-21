@@ -5,6 +5,9 @@ set -eux
 ETCD_VER=v3.6.0-rc.5
 ARCH=$(dpkg --print-architecture)
 
+HOME_CONFIG=/home/vagrant/k8sconfigs
+CERT_DIR=$HOME_CONFIG/certs
+
 # Install etcd
 ## choose either URL
 GOOGLE_URL=https://storage.googleapis.com/etcd
@@ -27,7 +30,7 @@ chmod +x /usr/local/bin/etcd /usr/local/bin/etcdctl /usr/local/bin/etcdutl
 # Configure etcd
 mkdir -p /etc/etcd /var/lib/etcd /var/lib/kubernetes/pki
 chmod 700 /var/lib/etcd
-cp /vagrant/certs/{ca.crt,kube-api-server.key,kube-api-server.crt} \
+cp $CERT_DIR/{ca.crt,kube-api-server.key,kube-api-server.crt} \
   /etc/etcd/
 
 

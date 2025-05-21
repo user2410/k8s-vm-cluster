@@ -66,15 +66,7 @@ def generate_subnets(cluster_cidr, num_workers)
   subnets
 end
 
-Vagrant.configure(2) do |config|
-  # Sync the scripts directory
-  config.vm.synced_folder "./scripts", "/vagrant/scripts", create: true
-  config.vm.synced_folder "./certs", "/vagrant/certs", create: true
-  config.vm.synced_folder "./kubeconfigs", "/vagrant/kubeconfigs", create: true
-  config.vm.synced_folder "./units", "/vagrant/units", create: true
-  config.vm.synced_folder "./configs", "/vagrant/configs", create: true
-  config.vm.provision "file", source: "./config.yaml", destination: "/home/vagrant/config.yaml"
-  
+Vagrant.configure(2) do |config|  
   # Allocate IP addresses for the master and worker nodes
   master_ip, worker_ips = configure_node_ips(worker_nodes_count)
   subnets = generate_subnets(pod_network_cidr, worker_nodes_count)
@@ -89,36 +81,7 @@ Vagrant.configure(2) do |config|
     puts "Node worker#{index + 1}: #{subnet}"
   end
 
-  ##########################################################################################
-  ###  Generate the /etc/hosts file to be deployed on every node and host manifest file  ###
-  ##########################################################################################
-
-  local_hosts_path = "./machines.txt"
-  # Update the hosts file with configured IP addresses
-  File.open(local_hosts_path, 'w') do |file|
-    file.puts ''
-    file.puts "# Kubernetes Cluster Hosts"
-    file.puts ''
-
-    # Add master entry
-    file.puts "#{master_ip} master master.kubernetes.local"
-
-    # Add worker entries
-    if worker_nodes_count >= 1
-      worker_ips.each_with_index do |worker_ip, index|
-        worker_hostname = "worker#{index + 1}"
-        file.puts "#{worker_ip} #{worker_hostname} #{worker_hostname}.kubernetes.local"
-      end
-    end
-
-    # # Add ipv6 context
-    # file.puts '# The following lines are desirable for IPv6 capable hosts'
-    # file.puts ''
-    # file.puts '::1     localhost ip6-localhost ip6-loopback'
-    # file.puts 'ff02::1 ip6-allnodes'
-    # file.puts 'ff02::2 ip6-allrouters'
-  end
-
+  #  Generate the host manifest file  
   local_hosts_path = "./machines.txt"
   File.open(local_hosts_path, 'w') do |file|
     # Write IP address, hostname, FQDN and Pod Subnet CIDR
@@ -133,19 +96,11 @@ Vagrant.configure(2) do |config|
     end
   end
 
-  #######################################################################
-  ##        Execute on each new VM the requirements.sh script          ##
-  #######################################################################
 
   # Define the amount of time given to the machine to complete reboot
   config.vm.boot_timeout = 600 # Set the boot timeout to 10 minutes
 
-  # Execute on each new machine the requirements.sh script to configure the system
-  config.vm.provision "shell", path: "./scripts/bootstrap.sh", args: worker_nodes_count
-
-  #######################################################################
-  ##   Create and configure the Master node, and deploy the cluster   ###
-  #######################################################################
+  config.vm.provision "shell", inline: "mkdir -p /home/vagrant/k8sconfigs/{certs,configs,kubeconfigs,scripts,units} && chmod -R 777 /home/vagrant/k8sconfigs"
 
   # Kubernetes Master
   config.vm.define "master" do |master|
@@ -177,10 +132,6 @@ Vagrant.configure(2) do |config|
     # master.vm.provision "shell", path: "./scripts/master.sh"
     master.vm.box_download_insecure = true
   end
-
-  #######################################################################
-  ###   Create and configure the worker nodes and join the cluster    ###
-  #######################################################################
   
   # Kubernetes nodes
   if worker_nodes_count >= 1

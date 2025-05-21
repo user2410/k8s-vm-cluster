@@ -4,46 +4,12 @@ vars:
   # Global vars
   CERT_COMPONENTS: "admin kube-proxy kube-scheduler kube-controller-manager kube-api-server etcd service-accounts{{.WORKER_HOSTS}}"
 
-includes:
-  kubeconfigs: kubeconfigs.taskfile.yml
-
 tasks:
-  test:
-    cmds:
-      - echo "{{.CERT_COMPONENTS}}"
-
-  dist:
-    desc: "Distribute certificates to VMs"
-    status:
-      - |
-        for prefix in {{.CERT_COMPONENTS}}; do
-          for ext in crt key; do
-            if [ ! -f "{{.CERT_PATH}}/${prefix}.${ext}" ]; then
-              exit 0  # File not found → skip it
-            fi
-          done
-        done
-        exit 1  # All files exist → run it
-    cmds:
-      - |
-        for i in $(seq 1 {{.WORKER_COUNT}}); do
-          HOSTNAME="worker$i"
-          echo "Copying certificates to each worker instance"
-          WORKER_IP=$(awk -v idx=$i '$2 == "worker"idx {print $1}' ./machines.txt)
-
-          scp -i .vagrant/machines/$HOSTNAME/virtualbox/private_key \
-            certs/ca.crt certs/ca.key certs/kube-apiserver.key certs/kube-apiserver.crt \
-            certs/apiserver-kubelet-client.crt certs/apiserver-kubelet-client.key \
-            certs/service-account.key certs/service-account.crt \
-            certs/etcd-server.key certs/etcd-server.crt \
-            certs/kube-controller-manager.key certs/kube-controller-manager.crt \
-            certs/kube-scheduler.key certs/kube-scheduler.crt \
-            vagrant@$WORKER_IP:~/
-        done
-
   gen:
     desc: "Generate CA and certificates for Kubernetes components"
-    
+    vars:
+      MASTER_IP:
+        sh: awk '/ master /{print $1}' ./machines.txt
     status:
       - test -f ./machines.txt
       - |
@@ -58,15 +24,16 @@ tasks:
         exit 1  # No files found → task is stale → run it
     cmds:
       - |
-        echo "Extracting variables..."
-        MASTER_IP=$(grep 'master' ./machines.txt | awk '{print $1}')
-        POD_NETWORK_CIDR=$(yq '.master.pod_network_cidr' config.yaml)
-        FIRST_IP=$(echo $POD_NETWORK_CIDR | cut -d '.' -f 1-3).1
-        echo "Extracted MASTER_IP: $MASTER_IP"
-        echo "Extracted POD_NETWORK_CIDR: $POD_NETWORK_CIDR"
+        if command -v yq >/dev/null 2>&1; then
+          POD_CIDR=$(yq '.master.pod_network_cidr' config.yaml)
+        else
+          POD_CIDR=$(awk '/ master /{print $4}' ./machines.txt)
+        fi
+        echo "Extracted POD_CIDR: $POD_CIDR"
+        FIRST_IP=$(echo $POD_CIDR | cut -d '.' -f 1-3).1
 
         echo "Generating certificates config file..."
-        sed -e "s/{MASTER_IP}/$MASTER_IP/g" -e "s/{POD_CIDR_FIRST_IP}/$FIRST_IP/g" ca.conf > /tmp/ca.conf
+        sed -e "s/{MASTER_IP}/{{.MASTER_IP}}/g" -e "s/{POD_CIDR_FIRST_IP}/$FIRST_IP/g" ca.conf > /tmp/ca.conf
         
       - |
         echo "# Create CA on Host"
@@ -96,8 +63,6 @@ tasks:
             -out "{{.CERT_PATH}}/$component.crt"
         done
 
-      - task: kubeconfigs:gen:all
-
   clean:
     desc: "Clean up generated certificates"
     cmds:
@@ -105,4 +70,3 @@ tasks:
         echo "Cleaning up certificates..."
         rm -f {{.CERT_PATH}}/*.key {{.CERT_PATH}}/*.crt {{.CERT_PATH}}/*.csr {{.CERT_PATH}}/ca.key {{.CERT_PATH}}/ca.crt {{.CERT_PATH}}/ca.srl
         echo "Certificates cleaned up."
-      - task: kubeconfigs:clean

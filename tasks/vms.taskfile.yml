@@ -11,13 +11,6 @@ tasks:
       - vagrant global-status
       - task: register-hosts
   
-  register-hosts:
-    desc: "Register VMs in /etc/hosts"
-    cmds:
-      - sudo cp /etc/hosts /etc/hosts.bak
-      - '{ echo ""; echo "# IP addresses of vms running K8s cluster"; } | sudo tee -a /etc/hosts > /dev/null'
-      - awk '{print $1, $2, $3}' machines.txt | sudo tee -a /etc/hosts > /dev/null
-
   start:single:
     desc: "Build / Turn on a single VM for K8s cluster"
     vars:
@@ -29,20 +22,45 @@ tasks:
       - vagrant up {{.VM_NAME}}
       - vagrant status {{.VM_NAME}}
 
+  register-hosts:
+    desc: "Register VMs in /etc/hosts"
+    cmds:
+      - sudo cp /etc/hosts /etc/hosts.bak
+      - 'echo "# IP addresses of vms running K8s cluster" | sudo tee -a /etc/hosts > /dev/null'
+      - awk '{print $1, $2, $3}' machines.txt | sudo tee -a /etc/hosts > /dev/null
+
+  bootstrap:
+    desc: "Run bootstrap script on all VMs"
+    vars:
+      MASTER_IP:
+        sh: awk '/ master /{print $1}' ./machines.txt
+    cmds:
+      - |
+        ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
+          vagrant@{{.MASTER_IP}} "sudo chmod +x {{.SCRIPT_DST_DIR}}/bootstrap.sh && sudo {{.SCRIPT_DST_DIR}}/bootstrap.sh"
+      - |
+        for i in $(seq 1 {{.WORKER_COUNT}}); do
+          HOSTNAME="worker$i"
+          echo "Running bootstrap script on $HOSTNAME..."
+          WORKER_IP=$(awk -v hostname="$HOSTNAME" '$2 == hostname {print $1}' ./machines.txt)
+          ssh {{.SSH_PARAMS}} -i .vagrant/machines/$HOSTNAME/virtualbox/private_key \
+            vagrant@$WORKER_IP "sudo chmod +x {{.SCRIPT_DST_DIR}}/bootstrap.sh && sudo {{.SCRIPT_DST_DIR}}/bootstrap.sh"
+        done
+  
   install:master:
     desc: "Running installation scripts on master node..."
     vars:
       MASTER_IP:
         sh: awk '/ master /{print $1}' ./machines.txt
     cmds:
-      - |        
+      - |
         ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
-          vagrant@{{.MASTER_IP}} "sudo chmod +x /vagrant/scripts/etcd.sh && sudo /vagrant/scripts/etcd.sh"
+          vagrant@{{.MASTER_IP}} "sudo chmod +x {{.SCRIPT_DST_DIR}}/etcd.sh && sudo {{.SCRIPT_DST_DIR}}/etcd.sh"
 
         sleep 1
 
         ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
-          vagrant@{{.MASTER_IP}} "sudo chmod +x /vagrant/scripts/k8s-master.sh && sudo /vagrant/scripts/k8s-master.sh"
+          vagrant@{{.MASTER_IP}} "sudo chmod +x {{.SCRIPT_DST_DIR}}/k8s-master.sh && sudo {{.SCRIPT_DST_DIR}}/k8s-master.sh"
   
   install:workers:
     cmds:
@@ -56,7 +74,7 @@ tasks:
           echo "Extracted WORKER_IP: $WORKER_IP"
 
           ssh {{.SSH_PARAMS}} -i .vagrant/machines/$HOSTNAME/virtualbox/private_key \
-            vagrant@$WORKER_IP "sudo chmod +x /vagrant/scripts/k8s-worker.sh && sudo /vagrant/scripts/k8s-worker.sh"
+            vagrant@$WORKER_IP "sudo chmod +x {{.SCRIPT_DST_DIR}}/k8s-worker.sh && sudo {{.SCRIPT_DST_DIR}}/k8s-worker.sh"
         done
 
   suspend:all:

@@ -16,13 +16,26 @@ vars:
         workers+=" worker$i"
       done
       echo "$workers"
+
   CERT_PATH: './certs'
+  CONFIG_PATH: './configs'
   KUBECONFIG_PATH: './kubeconfigs'
+  SCRIPT_PATH: './scripts'
   UNIT_PATH: './units'
+
+  HOME_DST_DIR: '/home/vagrant/k8sconfigs'
+  CERT_DST_DIR: '{{.HOME_DST_DIR}}/certs'
+  CONFIG_DST_DIR: '{{.HOME_DST_DIR}}/configs'
+  KUBECONFIG_DST_DIR: '{{.HOME_DST_DIR}}/kubeconfigs'
+  SCRIPT_DST_DIR: '{{.HOME_DST_DIR}}/scripts'
+  UNIT_DST_DIR: '{{.HOME_DST_DIR}}/units'
+
   SSH_PARAMS: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
   
 includes:
   certificates: tasks/certificates.taskfile.yml
+  dist: tasks/dist.taskfile.yml
+  kubeconfigs: tasks/kubeconfigs.taskfile.yml
   kubectl: tasks/kubectl.taskfile.yml
   networking: tasks/networking.taskfile.yml
   vms: tasks/vms.taskfile.yml
@@ -36,6 +49,9 @@ tasks:
       - vagrant snapshot push
       - task: networking:config
       - task: certificates:gen
+      - task: kubeconfigs:gen:all
+      - task: dist:all
+      - task: vms:bootstrap
       - task: vms:install:master
       - task: vms:install:workers
   
@@ -45,6 +61,8 @@ tasks:
         ignore_error: true
       - task: certificates:clean
         ignore_error: true
+      - task: kubeconfigs:clean
+        ignore_error: true
       - task: networking:clean
         ignore_error: true
       - task: kubectl:clean
@@ -53,3 +71,10 @@ tasks:
         ignore_error: true
       - cmd: rm -f ./machines.txt
         ignore_error: true
+
+  test:
+    desc: "Run tests"
+    vars:
+      NUMBERS: '0,1,1,1,2,2,3'
+    cmds:
+      - 'echo "{{splitList "," .NUMBERS | uniq | join "; " }}"'

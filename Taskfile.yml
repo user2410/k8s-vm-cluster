@@ -1,51 +1,55 @@
 version: '3'
 
+vars:
+  CLUSTER_NAME: '{{.CLUSTER_NAME | default "k8s-cluster"}}'
+  WORKER_COUNT:
+    sh: |
+      if command -v yq >/dev/null 2>&1; then
+        yq -r '.WorkerNodeCount' ./config.yaml
+      else
+        awk '/WorkerNodeCount/ {print $2; exit}' ./config.yaml
+      fi
+  WORKER_HOSTS:
+    sh: |
+      workers=""
+      for i in $(seq 1 {{.WORKER_COUNT}}); do
+        workers+=" worker$i"
+      done
+      echo "$workers"
+  CERT_PATH: './certs'
+  KUBECONFIG_PATH: './kubeconfigs'
+  UNIT_PATH: './units'
+  SSH_PARAMS: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+  
 includes:
   certificates: tasks/certificates.taskfile.yml
-  encryption-key: tasks/encryption-key.taskfile.yml
   kubectl: tasks/kubectl.taskfile.yml
   networking: tasks/networking.taskfile.yml
   vms: tasks/vms.taskfile.yml
+  tests: tasks/tests.taskfile.yml
 
-tasks:
+tasks:  
   build:
     desc: "Build / Turn on VMs for K8s cluster"
-    sources:
-      - ./machines.txt
     cmds:
       - task: vms:start:all
-      - task: networking:config:kube-proxy
-      - task: networking:config:kube-apiserver
-      - task: networking:config:pod-networking
-      - task: networking:config:cni
-      - task: certificates:gen:all
-      - |
-        echo "Running installation scripts on master node..."
-
-        echo "Extracting variable..."
-        MASTER_IP=$(grep 'master' ./machines.txt | awk '{print $1}')
-        echo "Extracted MASTER_IP: $MASTER_IP"
-        
-        ssh -i .vagrant/machines/master/virtualbox/private_key \
-          vagrant@$MASTER_IP "sudo chmod +x /vagrant/scripts/etcd.sh && sudo /vagrant/scripts/etcd.sh"
-
-        sleep 1
-
-        ssh -i .vagrant/machines/master/virtualbox/private_key \
-          vagrant@$MASTER_IP "sudo chmod +x /vagrant/scripts/k8s-master.sh && sudo /vagrant/scripts/k8s-master.sh"
-      - for: ['worker1', 'worker2']
-        cmd: |
-          echo "Running installation scripts on worker node {{.ITEM}}..."
-
-          echo "Extracting variable..."
-          WORKER_IP=$(grep '{{.ITEM}}' ./machines.txt | awk '{print $1}')
-          echo "Extracted WORKER_IP: $WORKER_IP"
-
-          ssh -i .vagrant/machines/{{.ITEM}}/virtualbox/private_key \
-            vagrant@$WORKER_IP "sudo chmod +x /vagrant/scripts/k8s-worker.sh && sudo /vagrant/scripts/k8s-worker.sh"
+      - vagrant snapshot push
+      - task: networking:config
+      - task: certificates:gen
+      - task: vms:install:master
+      - task: vms:install:workers
   
   destroy:
     cmds:
       - task: vms:destroy:all
+        ignore_error: true
       - task: certificates:clean
-      - rm -f ./scripts/local/{hosts,*.sh}
+        ignore_error: true
+      - task: networking:clean
+        ignore_error: true
+      - task: kubectl:clean
+        ignore_error: true
+      - cmd: rm -f ./scripts/local/{hosts,*.sh}
+        ignore_error: true
+      - cmd: rm -f ./machines.txt
+        ignore_error: true

@@ -1,34 +1,37 @@
 version: '3'
 
+vars:
+  # Global vars
+  CERT_COMPONENTS: "admin kube-proxy kube-scheduler kube-controller-manager kube-api-server etcd service-accounts{{.WORKER_HOSTS}}"
+
 includes:
   kubeconfigs: kubeconfigs.taskfile.yml
 
 tasks:
+  test:
+    cmds:
+      - echo "{{.CERT_COMPONENTS}}"
+
   dist:
     desc: "Distribute certificates to VMs"
-    vars:
-      WORKER_COUNT:
-        sh: yq -r '.WorkerNodeCount' ./config.yaml
-    sources:
-      - ./machines.txt
     status:
       - |
-        for prefix in admin worker1 worker2 kube-proxy kube-scheduler kube-controller-manager kube-api-server etcd service-accounts; do
+        for prefix in {{.CERT_COMPONENTS}}; do
           for ext in crt key; do
-            if [ ! -f "./certs/${prefix}.${ext}" ]; then
+            if [ ! -f "{{.CERT_PATH}}/${prefix}.${ext}" ]; then
               exit 0  # File not found → skip it
             fi
           done
         done
         exit 1  # All files exist → run it
     cmds:
-      - for: ['worker1', 'worker2']
-        cmd: |
-          echo "Extracting variable..."
-          WORKER_IP=$(grep '{{.ITEM}}' ./machines.txt | awk '{print $1}')
-          echo "Extracted WORKER_IP: $WORKER_IP"
+      - |
+        for i in $(seq 1 {{.WORKER_COUNT}}); do
+          HOSTNAME="worker$i"
+          echo "Copying certificates to each worker instance"
+          WORKER_IP=$(awk -v idx=$i '$2 == "worker"idx {print $1}' ./machines.txt)
 
-          scp -i .vagrant/machines/{{.ITEM}}/virtualbox/private_key \
+          scp -i .vagrant/machines/$HOSTNAME/virtualbox/private_key \
             certs/ca.crt certs/ca.key certs/kube-apiserver.key certs/kube-apiserver.crt \
             certs/apiserver-kubelet-client.crt certs/apiserver-kubelet-client.key \
             certs/service-account.key certs/service-account.crt \
@@ -36,27 +39,18 @@ tasks:
             certs/kube-controller-manager.key certs/kube-controller-manager.crt \
             certs/kube-scheduler.key certs/kube-scheduler.crt \
             vagrant@$WORKER_IP:~/
+        done
 
-  gen:all:
+  gen:
     desc: "Generate CA and certificates for Kubernetes components"
-    sources:
-      - ./machines.txt
+    
     status:
-      - |
-        if command -v yq >/dev/null 2>&1; then
-          exit 1
-        fi
-        exit 0
-      - |
-        if [ ! -f "./machines.txt" ]; then
-          exit 1
-        fi
-        exit 0
+      - test -f ./machines.txt
       - |
         # Check if ANY of the cert files exist
-        for prefix in admin worker1 worker2 kube-proxy kube-scheduler kube-controller-manager kube-api-server etcd service-accounts; do
+        for prefix in {{.CERT_COMPONENTS}}; do
           for ext in crt key csr; do
-            if [ -f "./certs/${prefix}.${ext}" ]; then
+            if [ -f "{{.CERT_PATH}}/${prefix}.${ext}" ]; then
               exit 0  # File found → task is up to date → skip it
             fi
           done
@@ -77,57 +71,38 @@ tasks:
       - |
         echo "# Create CA on Host"
         echo "## Create the CA Private Key"
-        openssl genrsa -out "./certs/ca.key" 4096
+        openssl genrsa -out "{{.CERT_PATH}}/ca.key" 4096
 
         echo "## Generate the CA Self-Signed Certificate"
         openssl req -x509 -new -sha512 -noenc \
-            -key "./certs/ca.key" -days 3653 \
+            -key "{{.CERT_PATH}}/ca.key" -days 3653 \
             -config "/tmp/ca.conf" \
-            -out "./certs/ca.crt"
-
-      - task: gen:single
-        vars: { COMPONENT: "admin" }
-      - task: gen:single
-        vars: { COMPONENT: "worker1" }
-      - task: gen:single
-        vars: { COMPONENT: "worker2" }
-      - task: gen:single
-        vars: { COMPONENT: "kube-proxy" }
-      - task: gen:single
-        vars: { COMPONENT: "kube-scheduler" }
-      - task: gen:single
-        vars: { COMPONENT: "kube-controller-manager" }
-      - task: gen:single
-        vars: { COMPONENT: "kube-api-server" }
-      - task: gen:single
-        vars: { COMPONENT: "service-accounts" }
-      - task: kubeconfigs:gen:all
-  
-  gen:single:
-    internal: true
-    vars:
-      COMPONENT: '{{.COMPONENT}}'
-    cmds:
+            -out "{{.CERT_PATH}}/ca.crt"
+      
       - |
-        echo "# Create certificates for {{.COMPONENT}}"
-        openssl genrsa -out "./certs/{{.COMPONENT}}.key" 4096
+        for component in {{.CERT_COMPONENTS}}; do
+          echo "# Create certificates for $component"
+          openssl genrsa -out "{{.CERT_PATH}}/$component.key" 4096
 
-        openssl req -new -key "./certs/{{.COMPONENT}}.key" -sha256 \
-          -config "/tmp/ca.conf" -section {{.COMPONENT}} \
-          -out "./certs/{{.COMPONENT}}.csr"
+          openssl req -new -key "{{.CERT_PATH}}/$component.key" -sha256 \
+            -config "/tmp/ca.conf" -section $component \
+            -out "{{.CERT_PATH}}/$component.csr"
 
-        openssl x509 -req -days 3653 -in "./certs/{{.COMPONENT}}.csr" \
-          -copy_extensions copyall \
-          -sha256 -CA "./certs/ca.crt" \
-          -CAkey "./certs/ca.key" \
-          -CAcreateserial \
-          -out "./certs/{{.COMPONENT}}.crt"
+          openssl x509 -req -days 3653 -in "{{.CERT_PATH}}/$component.csr" \
+            -copy_extensions copyall \
+            -sha256 -CA "{{.CERT_PATH}}/ca.crt" \
+            -CAkey "{{.CERT_PATH}}/ca.key" \
+            -CAcreateserial \
+            -out "{{.CERT_PATH}}/$component.crt"
+        done
+
+      - task: kubeconfigs:gen:all
 
   clean:
     desc: "Clean up generated certificates"
     cmds:
       - |
         echo "Cleaning up certificates..."
-        rm -f ./certs/*.key ./certs/*.crt ./certs/*.csr ./certs/ca.key ./certs/ca.crt ./certs/ca.srl
+        rm -f {{.CERT_PATH}}/*.key {{.CERT_PATH}}/*.crt {{.CERT_PATH}}/*.csr {{.CERT_PATH}}/ca.key {{.CERT_PATH}}/ca.crt {{.CERT_PATH}}/ca.srl
         echo "Certificates cleaned up."
       - task: kubeconfigs:clean

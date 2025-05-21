@@ -39,7 +39,7 @@ cp /vagrant/certs/{ca.crt,ca.key,kube-api-server.key,kube-api-server.crt,service
 ### Generate a random encryption key
 ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64)
 
-sed -i "s|\${ENCRYPTION_KEY}|$ENCRYPTION_KEY|g" $CONFIG_ORIGINAL_DIR/encryption-config.yaml > /var/lib/kubernetes/encryption-config.yaml
+sed "s|{ENCRYPTION_KEY}|$ENCRYPTION_KEY|g" $CONFIG_ORIGINAL_DIR/encryption-config.yaml > /var/lib/kubernetes/encryption-config.yaml
 
 cp $UNIT_ORIGINAL_DIR/kube-apiserver.service \
   /etc/systemd/system/kube-apiserver.service

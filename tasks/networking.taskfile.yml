@@ -1,28 +1,34 @@
 version: '3'
 
-vars:
-  WORKER_COUNT:
-    sh: yq -r '.WorkerNodeCount' ./config.yaml
-  MASTER_IP:
-    sh: awk '/ master /{print $1}' ./machines.txt
-  WORKER_IPS:
-    sh: awk '/ worker[0-9]+ /{print $1}' ./machines.txt | xargs
-  WORKER_SUBNETS:
-    sh: awk '/ worker[0-9]+ /{print $4}' ./machines.txt | xargs
-
 tasks:
+  config:
+    desc: "Configure networking"
+    sources:
+      - ./machines.txt
+    status:
+      - '! test -f ./machines.txt'
+    cmds:
+      - task: config:pod-networking
+      - task: config:kube-proxy
+      - task: config:kube-apiserver
+      - task: config:kube-controller-manager
+      - task: config:cni
+  
   config:pod-networking:
     desc: |
       1) On the master node, add a route to each worker subnet  
       2) On each worker node, add routes to every *other* worker subnet
+    vars:
+      MASTER_IP:
+        sh: awk '/ master /{print $1}' ./machines.txt
     cmds:
       # For each worker node, add a route to the worker subnet on the master node
       - |
         for i in $(seq 1 {{.WORKER_COUNT}}); do
-          WORKER_IP=$(echo {{.WORKER_IPS}} | cut -d ' ' -f $i)
-          WORKER_SUBNET=$(echo {{.WORKER_SUBNETS}} | cut -d ' ' -f $i)
+          WORKER_IP=$(awk -v idx=$i '$2 == "worker"idx {print $1}' ./machines.txt)
+          WORKER_SUBNET=$(awk -v idx=$i '$2 == "worker"idx {print $4}' ./machines.txt)
           echo "Adding route to worker subnet $WORKER_SUBNET on master node..."
-          ssh -i .vagrant/machines/master/virtualbox/private_key \
+          ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
             vagrant@{{.MASTER_IP}} "sudo ip route add $WORKER_SUBNET via $WORKER_IP"
         done
       # For each worker node, add routes to every *other* worker subnet
@@ -30,11 +36,11 @@ tasks:
         for i in $(seq 1 {{.WORKER_COUNT}}); do
           for j in $(seq 1 {{.WORKER_COUNT}}); do
             if [ $i -ne $j ]; then
-              WORKERI_IP=$(echo {{.WORKER_IPS}} | cut -d ' ' -f $i)
-              WORKERJ_IP=$(echo {{.WORKER_IPS}} | cut -d ' ' -f $j)
-              WORKERJ_SUBNET=$(echo {{.WORKER_SUBNETS}} | cut -d ' ' -f $j)
+              WORKERI_IP=$(awk -v idx=$i '$2 == "worker"idx {print $1}' ./machines.txt)
+              WORKERJ_IP=$(awk -v idx=$j '$2 == "worker"idx {print $1}' ./machines.txt)
+              WORKERJ_SUBNET=$(awk -v idx=$j '$2 == "worker"idx {print $4}' ./machines.txt)
               echo "Adding route to worker$j subnet $WORKERJ_SUBNET on worker$i..."
-              ssh -i .vagrant/machines/worker$i/virtualbox/private_key \
+              ssh {{.SSH_PARAMS}} -i .vagrant/machines/worker$i/virtualbox/private_key \
                 vagrant@$WORKERI_IP "sudo ip route add $WORKERJ_SUBNET via $WORKERJ_IP"
             fi
           done
@@ -42,51 +48,54 @@ tasks:
 
   config:kube-proxy:
     desc: "Configure kube-proxy"
-    status:
-      - |
-        if command -v yq >/dev/null 2>&1; then
-          exit 1
-        fi
-        exit 0
     cmds:
       - |
-        POD_CIDR=$(yq '.master.pod_network_cidr' config.yaml)
+        if command -v yq >/dev/null 2>&1; then
+          POD_CIDR=$(yq '.master.pod_network_cidr' config.yaml)
+        else
+          POD_CIDR=$(awk '/ master /{print $4}' ./machines.txt)
+        fi
         echo "Extracted POD_CIDR: $POD_CIDR"
         
         sed "s#{POD_CIDR}#${POD_CIDR}#g" ./configs/kube-proxy-config.template.yaml > ./configs/kube-proxy-config.yaml
 
   config:kube-apiserver:
     desc: "Configure kube-apiserver"
-    sources:
-      - ./machines.txt
-    status:
-      - |
-        if command -v yq >/dev/null 2>&1; then
-          exit 1
-        fi
-        exit 0
+    vars:
+      MASTER_IP:
+        sh: awk '/ master /{print $1}' ./machines.txt
+    cmds:
+      - sed "s#{MASTER_IP}#{{.MASTER_IP}}#g" {{.UNIT_PATH}}/kube-apiserver.template.service > {{.UNIT_PATH}}/kube-apiserver.service
+
+  config:kube-controller-manager:
+    desc: "Configure kube-controller-manager"
     cmds:
       - |
-        MASTER_IP=$(grep 'master' ./machines.txt | awk '{print $1}')
-        echo "Extracted MASTER_IP: $MASTER_IP"
-
-        sed "s#{MASTER_IP}#${MASTER_IP}#g" ./units/kube-apiserver.template.service > ./units/kube-apiserver.service
+        if command -v yq >/dev/null 2>&1; then
+          POD_CIDR=$(yq '.master.pod_network_cidr' config.yaml)
+        else
+          POD_CIDR=$(awk '/ master /{print $4}' ./machines.txt)
+        fi
+        echo "Extracted POD_CIDR: $POD_CIDR"
+        
+        sed "s#{POD_CIDR}#${POD_CIDR}#g" {{.UNIT_PATH}}/kube-controller-manager.template.service > {{.UNIT_PATH}}/kube-controller-manager.service
 
   config:cni:
     desc: "Configure CNI"
-    status:
-      - |
-        if command -v yq >/dev/null 2>&1; then
-          exit 1
-        fi
-        exit 0
     cmds:
       - |
         for i in $(seq 1 {{.WORKER_COUNT}}); do
-          WORKER_IP=$(echo {{.WORKER_IPS}} | cut -d ' ' -f $i)
-          WORKER_SUBNET=$(echo {{.WORKER_SUBNETS}} | cut -d ' ' -f $i)
+          WORKER_SUBNET=$(awk -v idx=$i '$2 == "worker"idx {print $4}' ./machines.txt)
           WORKER_HOSTNAME=worker$i
 
           sed "s|SUBNET|$WORKER_SUBNET|g" \
             ./configs/10-bridge.conf > ./configs/10-bridge.$WORKER_HOSTNAME.conf
         done
+
+  clean:
+    desc: "Clean up networking configuration"
+    cmds:
+      - rm -f ./configs/kube-proxy-config.yaml
+      - rm -f ./configs/10-bridge.worker*.conf
+      - rm -f {{.UNIT_PATH}}/kube-apiserver.service
+      - rm -f {{.UNIT_PATH}}/kube-controller-manager.service

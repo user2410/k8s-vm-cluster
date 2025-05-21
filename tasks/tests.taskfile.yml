@@ -1,21 +1,66 @@
 version: '3'
 
 tasks:
-  test:smoke:
-    desc: "Test if the control plane is up and running"
-    sources:
-      - ./machines.txt
+  smoke:
+    desc: "Smoke test the Kubernetes cluster"
     cmds:
+      - task: control-plane
+      - task: data-encryption
+      - task: deployment
   
-  verify:control-plane:
-    desc: "Verify that Kubernetes control plane is up and running."
-    sources:
-      - ./machines.txt
+  data-encryption:
+    desc: "Test if the encryption key is set up correctly"
+    vars:
+      MASTER_IP:
+        sh: awk '/ master /{print $1}' ./machines.txt
     cmds:
       - |
-        echo "Extracting variable..."
-        MASTER_IP=$(grep 'master' ./machines.txt | awk '{print $1}')
-        echo "Extracted MASTER_IP: $MASTER_IP"
+        SECRET_NAME="test-secret-$(date +%s)"
+        
+        kubectl create secret generic $SECRET_NAME \
+          --from-literal="mykey=mydata"
+        
+        ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
+          vagrant@{{.MASTER_IP}} \
+          "sudo etcdctl get /registry/secrets/default/$SECRET_NAME | strings | grep aescbc"
 
-        curl --cacert ./certs/ca.crt \
-          https://$MASTER_IP:6443/version
+        kubectl delete secret $SECRET_NAME
+
+  deployment:
+    desc: "Test a simple deployment"
+    cmds:
+      - kubectl create deployment nginx --image=nginx:latest
+      - kubectl wait --for=condition=ready pod -l app=nginx --timeout=60s
+      - |
+        POD_NAME=$(kubectl get pods -l app=nginx -o jsonpath="{.items[0].metadata.name}")
+
+        kubectl exec -ti "$POD_NAME" -- nginx -v
+
+        kubectl port-forward "$POD_NAME" 8080:80 > /dev/null 2>&1 &
+        PORT_FORWARD_PID=$!
+        sleep 2
+
+        curl -s http://localhost:8080 | grep "Welcome to nginx!"
+
+        kubectl expose deployment nginx --port 80 --type NodePort
+        NODE_PORT=$(kubectl get svc nginx -o jsonpath='{.spec.ports[0].nodePort}')
+        NODE_NAME=$(kubectl get pods -l app=nginx -o jsonpath="{.items[0].spec.nodeName}")
+        curl -I http://$NODE_NAME:$NODE_PORT || echo "⚠️ Warning: Could not reach service on node. Check firewall or use a node IP."
+
+        echo -e "\n🧹 Cleaning up port forward..."
+        kill "$PORT_FORWARD_PID" || true
+
+        echo -e "\n🧹 Cleaning up deployment..."
+        kubectl delete deployment nginx
+        kubectl delete service nginx
+        kubectl delete pod "$POD_NAME"
+
+  control-plane:
+    desc: "Verify that Kubernetes control plane is up and running."
+    vars:
+      MASTER_IP:
+        sh: awk '/ master /{print $1}' ./machines.txt
+    sources:
+      - ./machines.txt
+    cmds:
+      - curl --cacert {{.CERT_PATH}}/ca.crt https://{{.MASTER_IP}}:6443/version

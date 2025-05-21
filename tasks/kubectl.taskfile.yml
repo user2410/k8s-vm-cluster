@@ -4,8 +4,8 @@ tasks:
   config:
     desc: "Configure kubectl"
     vars:
-      K8S_CLUSTER_NAME: '{{.K8S_CLUSTER_NAME | default "k8s-cluster"}}'
-      CERT_ORIGINAL_DIR: "./certs"
+      MASTER_FQDN:
+        sh: awk '/ master /{print $3}' ./machines.txt
     status:
       - |
         if command -v kubectl >/dev/null 2>&1; then
@@ -14,19 +14,23 @@ tasks:
         exit 0
     cmds:
       - |
-        MASTER_IP=$(grep 'master' ./machines.txt | awk '{print $1}')
-        echo "Extracted MASTER_IP: $MASTER_IP"
-
-        kubectl config set-cluster {{.K8S_CLUSTER_NAME}} \
-            --certificate-authority={{.CERT_ORIGINAL_DIR}}/ca.crt \
+        kubectl config set-cluster {{.CLUSTER_NAME}} \
+            --certificate-authority={{.CERT_PATH}}/ca.crt \
             --embed-certs=true \
-            --server=https://master.kubernetes.local:6443
+            --server=https://{{.MASTER_FQDN}}:6443
       - |
         kubectl config set-credentials admin \
-          --client-certificate={{.CERT_ORIGINAL_DIR}}/admin.crt \
-          --client-key={{.CERT_ORIGINAL_DIR}}/admin.key
+          --client-certificate={{.CERT_PATH}}/admin.crt \
+          --client-key={{.CERT_PATH}}/admin.key
       - |
-        kubectl config set-context {{.K8S_CLUSTER_NAME}} \
-          --cluster={{.K8S_CLUSTER_NAME}} \
+        kubectl config set-context {{.CLUSTER_NAME}} \
+          --cluster={{.CLUSTER_NAME}} \
           --user=admin
-      - kubectl config use-context {{.K8S_CLUSTER_NAME}}
+      - kubectl config use-context {{.CLUSTER_NAME}}
+
+  clean:
+    desc: "Clean up kubectl config"
+    cmds:
+      - kubectl config delete-context {{.CLUSTER_NAME}}
+      - kubectl config delete-cluster {{.CLUSTER_NAME}}
+      - kubectl config delete-user admin

@@ -10,7 +10,7 @@ tasks:
       - vagrant up
       - vagrant global-status
       - task: register-hosts
-
+  
   register-hosts:
     desc: "Register VMs in /etc/hosts"
     cmds:
@@ -28,6 +28,36 @@ tasks:
     cmds:
       - vagrant up {{.VM_NAME}}
       - vagrant status {{.VM_NAME}}
+
+  install:master:
+    desc: "Running installation scripts on master node..."
+    vars:
+      MASTER_IP:
+        sh: awk '/ master /{print $1}' ./machines.txt
+    cmds:
+      - |        
+        ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
+          vagrant@{{.MASTER_IP}} "sudo chmod +x /vagrant/scripts/etcd.sh && sudo /vagrant/scripts/etcd.sh"
+
+        sleep 1
+
+        ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
+          vagrant@{{.MASTER_IP}} "sudo chmod +x /vagrant/scripts/k8s-master.sh && sudo /vagrant/scripts/k8s-master.sh"
+  
+  install:workers:
+    cmds:
+      - |
+        for i in $(seq 1 {{.WORKER_COUNT}}); do
+          HOSTNAME="worker$i"
+          echo "Running installation scripts on $HOSTNAME..."
+
+          echo "Extracting variable..."
+          WORKER_IP=$(awk -v hostname="$HOSTNAME" '$2 == hostname {print $1}' ./machines.txt)
+          echo "Extracted WORKER_IP: $WORKER_IP"
+
+          ssh {{.SSH_PARAMS}} -i .vagrant/machines/$HOSTNAME/virtualbox/private_key \
+            vagrant@$WORKER_IP "sudo chmod +x /vagrant/scripts/k8s-worker.sh && sudo /vagrant/scripts/k8s-worker.sh"
+        done
 
   suspend:all:
     desc: "Suspend VMs for K8s cluster"

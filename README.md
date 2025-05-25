@@ -13,6 +13,8 @@ This project aims to **automate the setup of a local Kubernetes cluster*- using 
 
 ## 🧱 Cluster Topology
 
+Depending on VirtualBox host-only interface settings of VirtualBox, the cluster will be set up differently on each machine. For example, if the host-only interface is set to `172.16.10.0/24`, the cluster will be configured as follows:
+
 | Node      | Role   | IP Address     | Vagrant Hostname |
 |-----------|--------|----------------|------------------|
 | master    | Master | `172.16.10.2`  | `master`         |
@@ -93,6 +95,9 @@ You should see all 3 nodes in `Ready` state.
 - [x] Initializes cluster on master
 - [x] Worker nodes join the cluster
 - [x] Core system pods are running
+- [x] The cluster is using the **reference CNI plugins** - suitable for testing or minimal environments.
+- [x] Deployment of `nginx` example app
+
 
 ### 🔜 Milestone 2 – Network Add-on & NodePort
 

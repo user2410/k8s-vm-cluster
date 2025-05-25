@@ -95,7 +95,7 @@ mv /tmp/{containerd,containerd-shim-runc-v2,containerd-stress} /bin/
 chmod +x /bin/{containerd,containerd-shim-runc-v2,containerd-stress}
 
 
-# Configure CNI Networking
+# Configure the reference CNI plugin
 
 ## Create the `bridge` network configuration file:
 # cp $CONFIG_DIR/{10-bridge.conf,99-loopback.conf} /etc/cni/net.d/

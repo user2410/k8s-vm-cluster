@@ -1,6 +1,7 @@
 version: '3'
 
 vars:
+  # General variables
   CLUSTER_NAME: '{{.CLUSTER_NAME | default "k8s-cluster"}}'
   WORKER_COUNT:
     sh: |
@@ -16,7 +17,8 @@ vars:
         workers+=" worker$i"
       done
       echo "$workers"
-
+  
+  ## Paths
   CERT_PATH: './certs'
   CONFIG_PATH: './configs'
   KUBECONFIG_PATH: './kubeconfigs'
@@ -30,7 +32,26 @@ vars:
   SCRIPT_DST_DIR: '{{.HOME_DST_DIR}}/scripts'
   UNIT_DST_DIR: '{{.HOME_DST_DIR}}/units'
 
+  ## Constants
   SSH_PARAMS: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+
+  # Lazy loading variables
+  MASTER_IP_CMD: |
+    awk '/ master /{print $1}' ./machines.txt
+  MASTER_FQDN_CMD: |
+    awk '/ master /{print $3}' ./machines.txt
+  POD_CIDR_CMD: |
+    if command -v yq >/dev/null 2>&1; then
+      yq '.master.pod_network_cidr' config.yaml
+    else
+      awk '/ master /{print $4}' ./machines.txt
+    fi
+  SERVICE_CIDR_CMD: |
+    if command -v yq >/dev/null 2>&1; then
+      yq '.master.service_network_cidr' config.yaml
+    else
+      awk '/ master /{print $5}' ./machines.txt
+    fi
   
 includes:
   certificates: tasks/certificates.taskfile.yml
@@ -49,7 +70,7 @@ tasks:
       - vagrant snapshot push
       - task: networking:config
       - task: certificates:gen
-      - task: kubeconfigs:gen:all
+      - task: kubeconfigs:gen
       - task: dist:all
       - task: vms:bootstrap
       - task: vms:install:master

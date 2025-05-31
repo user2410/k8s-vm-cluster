@@ -2,6 +2,10 @@
 
 set -eux
 
+# Arguments:
+# $1 - Kubernetes master FQDN
+MASTER_FQDN=master.kubernetes.local
+
 CLUSTER_NAME=k8s-cluster
 HOME_CONFIG=/home/vagrant/k8sconfigs
 CERT_DIR=$HOME_CONFIG/certs
@@ -9,7 +13,7 @@ CERT_DIR=$HOME_CONFIG/certs
 kubectl config set-cluster $CLUSTER_NAME \
     --certificate-authority=$CERT_DIR/ca.crt \
     --embed-certs=true \
-    --server=https://master.kubernetes.local:6443
+    --server=https://$MASTER_FQDN:6443
 
 kubectl config set-credentials admin \
   --client-certificate=$CERT_DIR/admin.crt \

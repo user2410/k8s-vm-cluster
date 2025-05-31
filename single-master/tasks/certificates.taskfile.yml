@@ -9,7 +9,14 @@ tasks:
     desc: "Generate CA and certificates for Kubernetes components"
     vars:
       MASTER_IP:
-        sh: awk '/ master /{print $1}' ./machines.txt
+        sh: |
+          {{.MASTER_IP_CMD}}
+      MASTER_FQDN:
+        sh: |
+          {{.MASTER_FQDN_CMD}}
+      POD_CIDR:
+        sh: |
+          {{.POD_CIDR_CMD}}
     status:
       - test -f ./machines.txt
       - |
@@ -24,16 +31,10 @@ tasks:
         exit 1  # No files found → task is stale → run it
     cmds:
       - |
-        if command -v yq >/dev/null 2>&1; then
-          POD_CIDR=$(yq '.master.pod_network_cidr' config.yaml)
-        else
-          POD_CIDR=$(awk '/ master /{print $4}' ./machines.txt)
-        fi
-        echo "Extracted POD_CIDR: $POD_CIDR"
-        FIRST_IP=$(echo $POD_CIDR | cut -d '.' -f 1-3).1
+        FIRST_IP=$(echo {{.POD_CIDR}} | cut -d '.' -f 1-3).1
 
         echo "Generating certificates config file..."
-        sed -e "s/{MASTER_IP}/{{.MASTER_IP}}/g" -e "s/{POD_CIDR_FIRST_IP}/$FIRST_IP/g" ca.conf > /tmp/ca.conf
+        sed -e "s/{MASTER_IP}/{{.MASTER_IP}}/g" -e "s/{MASTER_FQDN}/{{.MASTER_FQDN}}/g" -e "s/{POD_CIDR_FIRST_IP}/$FIRST_IP/g" ca.conf > /tmp/ca.conf
         
       - |
         echo "# Create CA on Host"

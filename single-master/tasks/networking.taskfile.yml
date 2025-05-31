@@ -20,7 +20,8 @@ tasks:
       2) On each worker node, add routes to every *other* worker subnet
     vars:
       MASTER_IP:
-        sh: awk '/ master /{print $1}' ./machines.txt
+        sh: |
+          {{.MASTER_IP_CMD}}
     cmds:
       # For each worker node, add a route to the worker subnet on the master node
       - |
@@ -48,54 +49,44 @@ tasks:
 
   config:kube-proxy:
     desc: "Configure kube-proxy"
+    vars:
+      POD_CIDR:
+        sh: |
+          {{.POD_CIDR_CMD}}
     cmds:
-      - |
-        if command -v yq >/dev/null 2>&1; then
-          POD_CIDR=$(yq '.master.pod_network_cidr' config.yaml)
-        else
-          POD_CIDR=$(awk '/ master /{print $4}' ./machines.txt)
-        fi
-        echo "Extracted POD_CIDR: $POD_CIDR"
-        
-        sed "s#{POD_CIDR}#${POD_CIDR}#g" ./configs/kube-proxy-config.template.yaml > ./configs/kube-proxy-config.yaml
+      - |        
+        sed "s#{POD_CIDR}#{{.POD_CIDR}}#g" ./configs/kube-proxy-config.template.yaml > ./configs/kube-proxy-config.yaml
 
   config:kube-apiserver:
     desc: "Configure kube-apiserver"
     vars:
       MASTER_IP:
-        sh: awk '/ master /{print $1}' ./machines.txt
+        sh: |
+          {{.MASTER_IP_CMD}}
+      MASTER_FQDN:
+        sh: |
+          {{.MASTER_FQDN_CMD}}
+      SERVICE_CIDR:
+        sh: |
+          {{.SERVICE_CIDR_CMD}}
     cmds:
-      - |
-        if command -v yq >/dev/null 2>&1; then
-          SERVICE_CIDR=$(yq '.master.pod_network_cidr' config.yaml)
-        else
-          SERVICE_CIDR=$(awk '/ master /{print $5}' ./machines.txt)
-        fi
-        echo "Extracted SERVICE_CIDR: $SERVICE_CIDR"
-        
-        sed "s#{MASTER_IP}#{{.MASTER_IP}}#g; s#{SERVICE_CIDR}#${SERVICE_CIDR}#g" \
+      - |        
+        sed "s#{MASTER_IP}#{{.MASTER_IP}}#g; s#{MASTER_FQDN}#{{.MASTER_FQDN}}#g; s#{SERVICE_CIDR}#{{.SERVICE_CIDR}}#g" \
           {{.UNIT_PATH}}/kube-apiserver.template.service > \
           {{.UNIT_PATH}}/kube-apiserver.service
 
   config:kube-controller-manager:
     desc: "Configure kube-controller-manager"
+    vars:
+      POD_CIDR:
+        sh: |
+          {{.POD_CIDR_CMD}}
+      SERVICE_CIDR:
+        sh: |
+          {{.SERVICE_CIDR_CMD}}
     cmds:
-      - |
-        if command -v yq >/dev/null 2>&1; then
-          POD_CIDR=$(yq '.master.pod_network_cidr' config.yaml)
-        else
-          POD_CIDR=$(awk '/ master /{print $4}' ./machines.txt)
-        fi
-        echo "Extracted POD_CIDR: $POD_CIDR"
-        
-        if command -v yq >/dev/null 2>&1; then
-          SERVICE_CIDR=$(yq '.master.pod_network_cidr' config.yaml)
-        else
-          SERVICE_CIDR=$(awk '/ master /{print $5}' ./machines.txt)
-        fi
-        echo "Extracted SERVICE_CIDR: $SERVICE_CIDR"
-        
-        sed "s#{POD_CIDR}#${POD_CIDR}#g; s#{SERVICE_CIDR}#${SERVICE_CIDR}#g" \
+      - |        
+        sed "s#{POD_CIDR}#{{.POD_CIDR}}#g; s#{SERVICE_CIDR}#{{.SERVICE_CIDR}}#g" \
           "{{.UNIT_PATH}}/kube-controller-manager.template.service" > \
           "{{.UNIT_PATH}}/kube-controller-manager.service"
 
@@ -118,3 +109,20 @@ tasks:
       - rm -f ./configs/10-bridge.worker*.conf
       - rm -f {{.UNIT_PATH}}/kube-apiserver.service
       - rm -f {{.UNIT_PATH}}/kube-controller-manager.service
+
+  tests:
+    vars:
+      MASTER_IP:
+        sh: |
+          {{.MASTER_IP_CMD}}
+      POD_CIDR:
+        sh: |
+          {{.POD_CIDR_CMD}}
+      MASTER_FQDN:
+        sh: |
+          {{.MASTER_FQDN_CMD}}
+      SERVICE_CIDR:
+        sh: |
+          {{.SERVICE_CIDR_CMD}}
+    cmds:
+      - echo "Testing networking configuration... {{.MASTER_IP}} {{.MASTER_FQDN}} {{.POD_CIDR}} {{.SERVICE_CIDR}}"

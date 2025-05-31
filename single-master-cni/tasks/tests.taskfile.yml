@@ -12,7 +12,8 @@ tasks:
     desc: "Test if the encryption key is set up correctly"
     vars:
       MASTER_IP:
-        sh: awk '/ master /{print $1}' ./machines.txt
+        sh: |
+          {{.MASTER_IP_CMD}}
     cmds:
       - |
         SECRET_NAME="test-secret-$(date +%s)"
@@ -59,7 +60,8 @@ tasks:
     desc: "Verify that Kubernetes control plane is up and running."
     vars:
       MASTER_IP:
-        sh: awk '/ master /{print $1}' ./machines.txt
+        sh: |
+          {{.MASTER_IP_CMD}}
     sources:
       - ./machines.txt
     cmds:

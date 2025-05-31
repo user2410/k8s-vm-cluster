@@ -33,7 +33,8 @@ tasks:
     desc: "Run bootstrap script on all VMs"
     vars:
       MASTER_IP:
-        sh: awk '/ master /{print $1}' ./machines.txt
+        sh: |
+          {{.MASTER_IP_CMD}}
     cmds:
       - |
         ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
@@ -51,7 +52,8 @@ tasks:
     desc: "Running installation scripts on master node..."
     vars:
       MASTER_IP:
-        sh: awk '/ master /{print $1}' ./machines.txt
+        sh: |
+          {{.MASTER_IP_CMD}}
     cmds:
       - |
         ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \

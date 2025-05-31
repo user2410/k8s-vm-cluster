@@ -1,0 +1,71 @@
+version: '3'
+
+tasks:
+  all:
+    desc: "Distribute all config files to VMs"
+    cmds:
+      # Distribute hosts file
+      - task: dist:hosts-file
+      # Script files
+      - task: dist:master
+        vars: { FILE_PATH: '{{.SCRIPT_PATH}}/{bootstrap.sh,k8s-master.sh,etcd.sh}', DEST_PATH: '{{.SCRIPT_DST_DIR}}' }
+      - task: dist:workers
+        vars: { FILE_PATH: '{{.SCRIPT_PATH}}/{bootstrap.sh,k8s-worker.sh}', DEST_PATH: '{{.SCRIPT_DST_DIR}}' }
+      # Master node
+      - task: dist:master
+        vars: { FILE_PATH: '{{.CERT_PATH}}/{ca.crt,ca.key,kube-api-server.key,kube-api-server.crt,service-accounts.key,service-accounts.crt}', DEST_PATH: '{{.CERT_DST_DIR}}' }
+      - task: dist:master
+        vars: { FILE_PATH: '{{.UNIT_PATH}}/{kube-apiserver.service,kube-controller-manager.service,kube-scheduler.service}', DEST_PATH: '{{.UNIT_DST_DIR}}' }
+      - task: dist:master
+        vars: { FILE_PATH: '{{.KUBECONFIG_PATH}}/{kube-controller-manager.kubeconfig,kube-scheduler.kubeconfig,admin.kubeconfig}', DEST_PATH: '{{.KUBECONFIG_DST_DIR}}' }
+      - task: dist:master
+        vars: { FILE_PATH: '{{.CONFIG_PATH}}/{encryption-config.yaml,kube-scheduler.yaml,kube-apiserver-to-kubelet.yaml}', DEST_PATH: '{{.CONFIG_DST_DIR}}' }
+      # Worker nodes
+      - task: dist:workers
+        vars: { FILE_PATH: '{{.CERT_PATH}}/{ca.crt,worker*.crt,worker*.key}', DEST_PATH: '{{.CERT_DST_DIR}}' }
+      - task: dist:workers
+        vars: { FILE_PATH: '{{.UNIT_PATH}}/{containerd.service,kubelet.service,kube-proxy.service}', DEST_PATH: '{{.UNIT_DST_DIR}}' }
+      - task: dist:workers
+        vars: { FILE_PATH: '{{.KUBECONFIG_PATH}}/{worker*.kubeconfig,kube-proxy.kubeconfig}', DEST_PATH: '{{.KUBECONFIG_DST_DIR}}' }
+      - task: dist:workers
+        vars: { FILE_PATH: '{{.CONFIG_PATH}}/{99-loopback.conf,10-bridge.worker*.conf,kubelet-config.yaml,containerd-config.toml,kube-proxy-config.yaml}', DEST_PATH: '{{.CONFIG_DST_DIR}}' }
+
+  dist:hosts-file:
+    desc: "Distribute /etc/hosts file to all VMs"
+    vars:
+      MASTER_IP:
+        sh: awk '/ master /{print $1}' ./machines.txt
+    cmds:
+      - awk '{NF--; print}' machines.txt > /tmp/hosts_addition
+      - task: dist:master
+        vars: { FILE_PATH: '/tmp/hosts_addition', DEST_PATH: '{{.HOME_DST_DIR}}' }
+      - task: dist:workers
+        vars: { FILE_PATH: '/tmp/hosts_addition', DEST_PATH: '{{.HOME_DST_DIR}}' }
+      - rm -f /tmp/hosts_addition
+      
+  dist:master:
+    desc: "Distribute config files to the master VM"
+    vars:
+      # FILE_PATH: {{.FILE_PATH}}
+      # DEST_PATH: {{.DEST_PATH}}
+      MASTER_IP:
+        sh: awk '/ master /{print $1}' ./machines.txt
+    cmds:
+      - |
+        scp {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
+          {{.FILE_PATH}} \
+          vagrant@{{.MASTER_IP}}:{{.DEST_PATH}}
+
+  dist:workers:
+    desc: "Distribute config files to all worker VMs"
+    # vars:
+      # FILE_PATH: {{.FILE_PATH}}
+      # DEST_PATH: {{.DEST_PATH}}
+    cmds:
+      - |
+        for i in $(seq 1 {{.WORKER_COUNT}}); do
+          WORKER_IP=$(awk -v idx=$i '$2 == "worker"idx {print $1}' ./machines.txt)
+          scp {{.SSH_PARAMS}} -i .vagrant/machines/worker$i/virtualbox/private_key \
+            {{.FILE_PATH}} \
+            vagrant@$WORKER_IP:{{.DEST_PATH}}
+        done

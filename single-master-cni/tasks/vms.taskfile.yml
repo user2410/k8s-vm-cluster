@@ -1,0 +1,134 @@
+version: '3'
+
+tasks:
+  start:all:
+    desc: "Build / Turn on VMs for K8s cluster"
+    status:
+      - '! which vagrant'
+      - '! test -f Vagrantfile'
+    cmds:
+      - vagrant up
+      - vagrant global-status
+      - task: register-hosts
+  
+  start:single:
+    desc: "Build / Turn on a single VM for K8s cluster"
+    vars:
+      VM_NAME: '{{.VM_NAME | default "master"}}'
+    status:
+      - '! which vagrant'
+      - '! test -f Vagrantfile'
+    cmds:
+      - vagrant up {{.VM_NAME}}
+      - vagrant status {{.VM_NAME}}
+
+  register-hosts:
+    desc: "Register VMs in /etc/hosts"
+    cmds:
+      - sudo cp /etc/hosts /etc/hosts.bak
+      - 'echo "# IP addresses of vms running K8s cluster" | sudo tee -a /etc/hosts > /dev/null'
+      - awk '{print $1, $2, $3}' machines.txt | sudo tee -a /etc/hosts > /dev/null
+
+  bootstrap:
+    desc: "Run bootstrap script on all VMs"
+    vars:
+      MASTER_IP:
+        sh: awk '/ master /{print $1}' ./machines.txt
+    cmds:
+      - |
+        ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
+          vagrant@{{.MASTER_IP}} "sudo chmod +x {{.SCRIPT_DST_DIR}}/bootstrap.sh && sudo {{.SCRIPT_DST_DIR}}/bootstrap.sh"
+      - |
+        for i in $(seq 1 {{.WORKER_COUNT}}); do
+          HOSTNAME="worker$i"
+          echo "Running bootstrap script on $HOSTNAME..."
+          WORKER_IP=$(awk -v hostname="$HOSTNAME" '$2 == hostname {print $1}' ./machines.txt)
+          ssh {{.SSH_PARAMS}} -i .vagrant/machines/$HOSTNAME/virtualbox/private_key \
+            vagrant@$WORKER_IP "sudo chmod +x {{.SCRIPT_DST_DIR}}/bootstrap.sh && sudo {{.SCRIPT_DST_DIR}}/bootstrap.sh"
+        done
+  
+  install:master:
+    desc: "Running installation scripts on master node..."
+    vars:
+      MASTER_IP:
+        sh: awk '/ master /{print $1}' ./machines.txt
+    cmds:
+      - |
+        ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
+          vagrant@{{.MASTER_IP}} "sudo chmod +x {{.SCRIPT_DST_DIR}}/etcd.sh && sudo {{.SCRIPT_DST_DIR}}/etcd.sh"
+
+        sleep 1
+
+        ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
+          vagrant@{{.MASTER_IP}} "sudo chmod +x {{.SCRIPT_DST_DIR}}/k8s-master.sh && sudo {{.SCRIPT_DST_DIR}}/k8s-master.sh"
+  
+  install:workers:
+    cmds:
+      - |
+        for i in $(seq 1 {{.WORKER_COUNT}}); do
+          HOSTNAME="worker$i"
+          echo "Running installation scripts on $HOSTNAME..."
+
+          echo "Extracting variable..."
+          WORKER_IP=$(awk -v hostname="$HOSTNAME" '$2 == hostname {print $1}' ./machines.txt)
+          echo "Extracted WORKER_IP: $WORKER_IP"
+
+          ssh {{.SSH_PARAMS}} -i .vagrant/machines/$HOSTNAME/virtualbox/private_key \
+            vagrant@$WORKER_IP "sudo chmod +x {{.SCRIPT_DST_DIR}}/k8s-worker.sh && sudo {{.SCRIPT_DST_DIR}}/k8s-worker.sh"
+        done
+
+  suspend:all:
+    desc: "Suspend VMs for K8s cluster"
+    status:
+      - '! which vagrant'
+      - '! test -f Vagrantfile'
+    cmds:
+      - vagrant suspend
+      - vagrant global-status
+  
+  suspend:single:
+    desc: "Suspend a single VM for K8s cluster"
+    vars:
+      VM_NAME: '{{.VM_NAME | default "master"}}'
+    status:
+      - '! which vagrant'
+      - '! test -f Vagrantfile'
+    cmds:
+      - vagrant suspend {{.VM_NAME}}
+      - vagrant status {{.VM_NAME}}
+  
+  destroy:all:
+    desc: "Destroy VMs for K8s cluster"
+    status:
+      - '! which vagrant'
+      - '! test -f Vagrantfile'
+    cmds:
+      - vagrant destroy -f
+      - vagrant global-status
+      - task: unregister-hosts
+
+  unregister-hosts:
+    desc: "Remove K8s VM entries from /etc/hosts"
+    cmds:
+      - sudo cp /etc/hosts /etc/hosts.bak
+      # Read entries from machines.txt and remove matching lines from /etc/hosts
+      - |
+        while read -r ip hostname fqdn _; do
+          if [ -n "$ip" ] && [ -n "$hostname" ] && [ -n "$fqdn" ]; then
+            sudo sed -i "/^$ip $hostname $fqdn$/d" /etc/hosts
+          fi
+        done < machines.txt
+      # Also remove the comment line
+      - sudo sed -i '/^# IP addresses of vms running K8s cluster$/d' /etc/hosts
+      - echo "Removed K8s cluster entries from /etc/hosts"
+
+  destroy:single:
+    desc: "Destroy a single VM for K8s cluster"
+    vars:
+      VM_NAME: '{{.VM_NAME | default "master"}}'
+    status:
+      - '! which vagrant'
+      - '! test -f Vagrantfile'
+    cmds:
+      - vagrant destroy -f {{.VM_NAME}}
+      - vagrant status {{.VM_NAME}}

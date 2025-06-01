@@ -23,7 +23,7 @@ tasks:
         
         ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
           vagrant@{{.MASTER_IP}} \
-          "sudo etcdctl get /registry/secrets/default/$SECRET_NAME | strings | grep aescbc"
+          "sudo etcdctl --cert=/etc/etcd/etcd.crt --key=/etc/etcd/etcd.key --cacert=/etc/etcd/ca.crt get /registry/secrets/default/$SECRET_NAME | strings | grep aescbc"
 
         kubectl delete secret $SECRET_NAME
 

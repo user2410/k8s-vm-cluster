@@ -14,7 +14,7 @@ tasks:
       # Master node
       - task: dist:master:certs
       - task: dist:master
-        vars: { FILE_PATH: '{{.UNIT_PATH}}/{kube-apiserver.service,kube-controller-manager.service,kube-scheduler.service}', DEST_PATH: '{{.UNIT_DST_DIR}}' }
+        vars: { FILE_PATH: '{{.UNIT_PATH}}/{kube-apiserver.service,kube-controller-manager.service,kube-scheduler.service,etcd.service}', DEST_PATH: '{{.UNIT_DST_DIR}}' }
       - task: dist:master
         vars: { FILE_PATH: '{{.KUBECONFIG_PATH}}/{kube-controller-manager.kubeconfig,kube-scheduler.kubeconfig,admin.kubeconfig}', DEST_PATH: '{{.KUBECONFIG_DST_DIR}}' }
       - task: dist:master
@@ -61,7 +61,7 @@ tasks:
     desc: "Distribute certificates to the master VM"
     cmds:
       - task: dist:master
-        vars: { FILE_PATH: '{{.CERT_PATH}}/{ca.crt,ca.key,kube-api-server.key,kube-api-server.crt,service-accounts.key,service-accounts.crt}', DEST_PATH: '{{.CERT_DST_DIR}}' }
+        vars: { FILE_PATH: '{{.CERT_PATH}}/{ca.crt,ca.key,kube-api-server.key,kube-api-server.crt,service-accounts.key,service-accounts.crt,etcd.crt,etcd.key}', DEST_PATH: '{{.CERT_DST_DIR}}' }
   
   dist:workers:
     desc: "Distribute config files to all worker VMs"

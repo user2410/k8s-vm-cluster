@@ -5,14 +5,20 @@ Documentation=https://github.com/etcd-io/etcd
 [Service]
 Type=notify
 ExecStart=/usr/local/bin/etcd \
-  --name controller \
-  --initial-advertise-peer-urls http://127.0.0.1:2380 \
-  --listen-peer-urls http://127.0.0.1:2380 \
-  --listen-client-urls http://127.0.0.1:2379 \
-  --advertise-client-urls http://127.0.0.1:2379 \
-  --initial-cluster-token etcd-cluster-0 \
-  --initial-cluster controller=http://127.0.0.1:2380 \
-  --initial-cluster-state new \
+  --name master \
+  --cert-file=/etc/etcd/etcd.crt \
+  --key-file=/etc/etcd/etcd.key \
+  --peer-cert-file=/etc/etcd/etcd.crt \
+  --peer-key-file=/etc/etcd/etcd.key \
+  --trusted-ca-file=/etc/etcd/ca.crt \
+  --peer-trusted-ca-file=/etc/etcd/ca.crt \
+  --initial-advertise-peer-urls https://127.0.0.1:2380 \
+  --listen-peer-urls https://127.0.0.1:2380 \
+  --listen-client-urls https://127.0.0.1:2379 \
+  --advertise-client-urls https://127.0.0.1:2379 \
+  --initial-cluster master=https://127.0.0.1:2380 \
+  --peer-client-cert-auth \
+  --client-cert-auth \
   --data-dir=/var/lib/etcd
 Restart=on-failure
 RestartSec=5

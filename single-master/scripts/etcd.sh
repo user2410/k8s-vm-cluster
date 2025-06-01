@@ -7,6 +7,7 @@ ARCH=$(dpkg --print-architecture)
 
 HOME_CONFIG=/home/vagrant/k8sconfigs
 CERT_DIR=$HOME_CONFIG/certs
+UNIT_DIR=$HOME_CONFIG/units
 
 # Install etcd
 ## choose either URL
@@ -30,33 +31,12 @@ chmod +x /usr/local/bin/etcd /usr/local/bin/etcdctl /usr/local/bin/etcdutl
 # Configure etcd
 mkdir -p /etc/etcd /var/lib/etcd /var/lib/kubernetes/pki
 chmod 700 /var/lib/etcd
-cp $CERT_DIR/{ca.crt,kube-api-server.key,kube-api-server.crt} \
+cp $CERT_DIR/{ca.crt,kube-api-server.key,kube-api-server.crt,etcd.key,etcd.crt} \
   /etc/etcd/
-
-
-cat <<EOF | sudo tee /etc/systemd/system/etcd.service
-[Unit]
-Description=etcd
-Documentation=https://github.com/etcd-io/etcd
-
-[Service]
-Type=notify
-ExecStart=/usr/local/bin/etcd \
-  --name controller \
-  --initial-advertise-peer-urls http://127.0.0.1:2380 \
-  --listen-peer-urls http://127.0.0.1:2380 \
-  --listen-client-urls http://127.0.0.1:2379 \
-  --advertise-client-urls http://127.0.0.1:2379 \
-  --initial-cluster-token etcd-cluster-0 \
-  --initial-cluster controller=http://127.0.0.1:2380 \
-  --initial-cluster-state new \
-  --data-dir=/var/lib/etcd
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF
+cp $CERT_DIR/ca.crt /var/lib/kubernetes/pki/
+chown root:root {/etc/etcd/,/var/lib/kubernetes/pki/}*
+chmod 600 {/etc/etcd/,/var/lib/kubernetes/pki/}*
+cp $UNIT_DIR/etcd.service /etc/systemd/system/etcd.service
 
 # Start the etcd Server
 systemctl daemon-reload
@@ -67,9 +47,7 @@ systemctl start etcd
 sleep 5
 
 # Check the etcd Server
-etcdctl member list
-# ETCDCTL_API=3 etcdctl member list \
-#   --endpoints=https://127.0.0.1:2379 \
-#   --cacert=/etc/etcd/ca.crt \
-#   --cert=/etc/etcd/etcd.crt \
-#   --key=/etc/etcd/etcd.key
+etcdctl member list \
+  --cacert=/etc/etcd/ca.crt \
+  --cert=/etc/etcd/etcd.crt \
+  --key=/etc/etcd/etcd.key

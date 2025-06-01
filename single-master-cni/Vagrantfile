@@ -50,37 +50,13 @@ def configure_node_ips(worker_count)
   return [master_ip, worker_ips]
 end
 
-# Generate subnets for worker nodes based on the cluster CIDR
-# This function generates subnets for each worker node based on the provided cluster CIDR
-# It assumes that the cluster CIDR is in the format "x.x.x.x/16"
-# and generates subnets in the format "x.x.x.0/24", "x.x.x.1/24", etc.
-def generate_subnets(cluster_cidr, num_workers)
-  base = IPAddr.new(cluster_cidr)
-  subnets = []
-
-  (0...num_workers).each do |i|
-    # Calculate the subnet offset within the /16 range
-    subnet_ip = IPAddr.new((base.to_i + (i << 8)), Socket::AF_INET)
-    subnets << "#{subnet_ip.to_s}/24"
-  end
-
-  subnets
-end
-
 Vagrant.configure(2) do |config|  
   # Allocate IP addresses for the master and worker nodes
   master_ip, worker_ips = configure_node_ips(worker_nodes_count)
-  subnets = generate_subnets(pod_network_cidr, worker_nodes_count)
 
   # Verify the IP addresses
   puts "Master IP: #{master_ip}"
   puts "Worker IPs: #{worker_ips.join(', ')}"
-
-  # Verify the subnets
-  puts "Allocated subnets:"
-  subnets.each_with_index do |subnet, index|
-    puts "Node worker#{index + 1}: #{subnet}"
-  end
 
   #  Generate the host manifest file  
   local_hosts_path = "./machines.txt"
@@ -92,7 +68,7 @@ Vagrant.configure(2) do |config|
     if worker_nodes_count >= 1
       worker_ips.each_with_index do |worker_ip, index|
         worker_hostname = "worker#{index + 1}"
-        file.puts "#{worker_ip} #{worker_hostname} #{worker_hostname}.kubernetes.local #{subnets[index]}"
+        file.puts "#{worker_ip} #{worker_hostname} #{worker_hostname}.kubernetes.local"
       end
     end
   end

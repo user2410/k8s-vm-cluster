@@ -3,10 +3,11 @@
 set -eux
 
 ARCH=$(dpkg --print-architecture)
-CERT_DIR=/home/vagrant/k8sconfigs/certs
-CONFIG_DIR=/home/vagrant/k8sconfigs/configs
-KUBECONFIG_DIR=/home/vagrant/k8sconfigs/kubeconfigs
-UNIT_DIR=/home/vagrant/k8sconfigs/units
+HOME_CONFIG=/home/vagrant/k8sconfigs
+CERT_DIR=$HOME_CONFIG/certs
+CONFIG_DIR=$HOME_CONFIG/configs
+KUBECONFIG_DIR=$HOME_CONFIG/kubeconfigs
+UNIT_DIR=$HOME_CONFIG/units
 
 # Install the OS dependencies
 apt-get update
@@ -57,7 +58,7 @@ CRI_VER=v1.33.0
 CONTAINERD_VER=2.1.0
 RUNC_VER=v1.3.0
 
-## Create the installation directories:
+## Create installation directories:
 mkdir -p \
   /etc/cni/net.d \
   /opt/cni/bin \
@@ -95,9 +96,9 @@ mv /tmp/{containerd,containerd-shim-runc-v2,containerd-stress} /bin/
 chmod +x /bin/{containerd,containerd-shim-runc-v2,containerd-stress}
 
 
-# Configure the reference CNI plugin
+# Configure reference CNI plugin
 
-## Create the `bridge` network configuration file:
+## Create `bridge` network configuration file:
 # cp $CONFIG_DIR/{10-bridge.conf,99-loopback.conf} /etc/cni/net.d/
 HOSTNAME=$(hostname -s)
 
@@ -118,15 +119,13 @@ cp $CONFIG_DIR/kubelet-config.yaml /etc/cni/net.d/kubelet-config.yaml
 
 # Configure containerd
 
-## Install the `containerd` configuration files:
+## Install `containerd` configuration files:
 mkdir -p /etc/containerd/
 cp $CONFIG_DIR/containerd-config.toml /etc/containerd/config.toml
 cp $UNIT_DIR/containerd.service /etc/systemd/system/
 
 
-# Configure the Kubelet
-
-## Create the `kubelet-config.yaml` configuration file:
+# Configure Kubelet
 cp $CONFIG_DIR/kubelet-config.yaml /var/lib/kubelet/
 cp $KUBECONFIG_DIR/$HOSTNAME.kubeconfig /var/lib/kubelet/kubeconfig
 cp $CERT_DIR/ca.crt /var/lib/kubelet/
@@ -135,7 +134,7 @@ cp $CERT_DIR/$HOSTNAME.key /var/lib/kubelet/kubelet.key
 cp $UNIT_DIR/kubelet.service /etc/systemd/system/
 
 
-# Configure the Kubernetes Proxy
+# Configure Kubernetes Proxy
 cp $CONFIG_DIR/kube-proxy-config.yaml $KUBECONFIG_DIR/kube-proxy.kubeconfig /var/lib/kube-proxy/
 cp $UNIT_DIR/kube-proxy.service /etc/systemd/system/
 
@@ -149,13 +148,12 @@ systemctl start containerd kubelet kube-proxy
 # Wait for the kubelet to start
 sleep 10
 
-# Verification
+# Verify
 for i in containerd kube-proxy kubelet; do
   if systemctl is-active --quiet $i; then
     echo "$i is active"
   else
     echo "$i is not active"
-    journalctl -u $i -n 50 | head -n 50
-    echo "================================"
+    exit 1
   fi
 done

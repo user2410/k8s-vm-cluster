@@ -1,9 +1,5 @@
 version: '3'
 
-vars:
-  # Global vars
-  CERT_COMPONENTS: "admin kube-proxy kube-scheduler kube-controller-manager kube-api-server etcd service-accounts{{.WORKER_HOSTS}}"
-
 tasks:
   gen:
     desc: "Generate CA and certificates for Kubernetes components"
@@ -17,6 +13,7 @@ tasks:
       POD_CIDR:
         sh: |
           {{.POD_CIDR_CMD}}
+      CERT_COMPONENTS: "admin kube-proxy kube-scheduler kube-controller-manager kube-api-server etcd service-accounts"
     status:
       - test -f ./machines.txt
       - |
@@ -35,31 +32,6 @@ tasks:
 
         echo "Generating certificates config file..."
         sed -e "s/{MASTER_IP}/{{.MASTER_IP}}/g" -e "s/{MASTER_FQDN}/{{.MASTER_FQDN}}/g" -e "s/{POD_CIDR_FIRST_IP}/$FIRST_IP/g" ca.conf > /tmp/ca.conf
-        for i in $(seq 1 {{.WORKER_COUNT}}); do
-          echo "
-          [worker${i}]
-          distinguished_name = worker${i}_distinguished_name
-          prompt             = no
-          req_extensions     = worker${i}_req_extensions
-
-          [worker${i}_req_extensions]
-          basicConstraints     = CA:FALSE
-          extendedKeyUsage     = clientAuth, serverAuth
-          keyUsage             = critical, digitalSignature, keyEncipherment
-          nsCertType           = client
-          nsComment            = "worker${i} certificate"
-          subjectAltName       = DNS:worker${i}, IP:127.0.0.1
-          subjectKeyIdentifier = hash
-
-          [worker${i}_distinguished_name]
-          CN = system:node:worker${i}
-          O  = system:nodes
-          C  = US
-          ST = Washington
-          L  = Seattle
-          " >> /tmp/ca.conf
-        done
-        
       - |
         echo "# Create CA on Host"
         echo "## Create the CA Private Key"
@@ -87,11 +59,36 @@ tasks:
             -CAcreateserial \
             -out "{{.CERT_PATH}}/$component.crt"
         done
+      - task: tls-bootstrap
+        
+  tls-bootstrap:
+    desc: "Generate TLS bootstrap certificates"
+    generate:
+      - ./bootstrap_token.yaml
+    cmds:
+      - |
+        generate_random_string() {
+          local length=$1
+          tr -dc 'a-z0-9' </dev/urandom | head -c "$length"
+        }
+        TOKEN_ID=$(generate_random_string 6)
+        TOKEN_SECRET=$(generate_random_string 16)
+        BOOTSTRAP_TOKEN="${TOKEN_ID}.${TOKEN_SECRET}"
+        EXPIRATION=$(date -u --date "+30 days" +"%Y-%m-%dT%H:%M:%SZ")
+        
+        cat <<EOF > bootstrap_token.yaml
+        bootstrap_token: ${BOOTSTRAP_TOKEN}
+        expiration: ${EXPIRATION}
+        EOF
+
+        sed \
+          -e "s/{TOKEN_ID}/$TOKEN_ID/g" \
+          -e "s/{TOKEN_SECRET}/$TOKEN_SECRET/g" \
+          -e "s/{EXPIRATION}/$EXPIRATION/g" \
+          {{.CONFIG_PATH}}/bootstrap-token.template.yaml > "{{.CONFIG_PATH}}/bootstrap-token-${TOKEN_ID}.yaml"
 
   clean:
     desc: "Clean up generated certificates"
     cmds:
-      - |
-        echo "Cleaning up certificates..."
-        rm -f {{.CERT_PATH}}/*.key {{.CERT_PATH}}/*.crt {{.CERT_PATH}}/*.csr {{.CERT_PATH}}/ca.key {{.CERT_PATH}}/ca.crt {{.CERT_PATH}}/ca.srl
-        echo "Certificates cleaned up."
+      - rm -f {{.CERT_PATH}}/*.key {{.CERT_PATH}}/*.crt {{.CERT_PATH}}/*.csr {{.CERT_PATH}}/ca.key {{.CERT_PATH}}/ca.crt {{.CERT_PATH}}/ca.srl
+      - rm -f ./bootstrap-token-*.yaml

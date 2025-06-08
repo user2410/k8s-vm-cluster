@@ -11,6 +11,7 @@ tasks:
       - task: config:kube-proxy
       - task: config:kube-apiserver
       - task: config:kube-controller-manager
+      - task: config:kubelet
 
   config:kube-proxy:
     desc: "Configure kube-proxy"
@@ -54,6 +55,23 @@ tasks:
           "{{.UNIT_PATH}}/kube-controller-manager.template.service" > \
           "{{.UNIT_PATH}}/kube-controller-manager.service"
 
+  config:kubelet:
+    desc: "Configure kubelet"
+    vars:
+      SERVICE_CIDR:
+        sh: |
+          {{.SERVICE_CIDR_CMD}}
+      CLUSTER_DNS: 
+        sh: |
+          echo {{.SERVICE_CIDR}} | awk 'BEGIN {FS="."} ; { printf("%s.%s.%s.10", $1, $2, $3) }'
+    cmds:
+      - |
+        for i in $(seq 1 {{.WORKER_COUNT}}); do
+          WORKER_IP=$(awk -v idx=$i '$2 == "worker"idx {print $1}' ./machines.txt)
+          sed "s#{PRIMARY_IP}#${WORKER_IP}#g" {{.UNIT_PATH}}/kubelet.template.service > {{.UNIT_PATH}}/kubelet.worker$i.service
+          sed "s#{CLUSTER_DNS}#{{.CLUSTER_DNS}}#g" {{.CONFIG_PATH}}/kubelet-config.template.yaml > {{.CONFIG_PATH}}/kubelet-config.yaml
+        done
+  
   clean:
     desc: "Clean up networking configuration"
     cmds:

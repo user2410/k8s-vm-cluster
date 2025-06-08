@@ -52,7 +52,7 @@ vars:
     else
       awk '/ master /{print $5}' ./machines.txt
     fi
-  
+
 includes:
   certificates: tasks/certificates.taskfile.yml
   dist: tasks/dist.taskfile.yml
@@ -67,6 +67,7 @@ tasks:
     desc: "Build / Turn on VMs for K8s cluster"
     cmds:
       - task: vms:start:all
+      - task: vms:register-hosts
       - vagrant snapshot push
       - task: networking:config
       - task: certificates:gen
@@ -92,10 +93,3 @@ tasks:
         ignore_error: true
       - cmd: rm -f ./machines.txt
         ignore_error: true
-
-  test:
-    desc: "Run tests"
-    vars:
-      NUMBERS: '0,1,1,1,2,2,3'
-    cmds:
-      - 'echo "{{splitList "," .NUMBERS | uniq | join "; " }}"'

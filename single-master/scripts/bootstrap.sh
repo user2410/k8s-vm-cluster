@@ -10,11 +10,11 @@ sudo echo "# Kubernetes Cluster Hosts" >> /etc/hosts
 sudo cat $HOME_CONFIG/hosts_addition >> /etc/hosts
 
 # install time synchronization server
-sudo apt update
-sudo apt-get install ntp -y
-sudo apt-get install ntpdate -y
-sudo ntpdate -u ntp.ubuntu.com
-echo "...done..."
+# sudo apt update
+# sudo apt-get install ntp -y
+# sudo apt-get install ntpdate -y
+# sudo ntpdate -u ntp.ubuntu.com
+# echo "...done..."
 
 # Forwarding IPv4 and letting iptables see bridged traffic:
 ## Add kernel modules

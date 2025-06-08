@@ -58,13 +58,15 @@ CRI_VER=v1.33.0
 CONTAINERD_VER=2.1.0
 RUNC_VER=v1.3.0
 
-## Create installation directories:
+## Create installation and connfiguration directories:
 mkdir -p \
   /etc/cni/net.d \
   /opt/cni/bin \
   /var/lib/kubelet \
+  /var/lib/kubelet/pki \
   /var/lib/kube-proxy \
   /var/lib/kubernetes \
+  /var/lib/kubernetes/pki \
   /var/run/kubernetes
 
 cat <<EOF > /tmp/downloads.txt
@@ -128,13 +130,23 @@ cp $UNIT_DIR/containerd.service /etc/systemd/system/
 # Configure Kubelet
 cp $CONFIG_DIR/kubelet-config.yaml /var/lib/kubelet/
 cp $KUBECONFIG_DIR/$HOSTNAME.kubeconfig /var/lib/kubelet/kubeconfig
+cp $KUBECONFIG_DIR/tls-bootstrap.kubeconfig /var/lib/kubelet/
 cp $CERT_DIR/ca.crt /var/lib/kubelet/
 cp $CERT_DIR/$HOSTNAME.crt /var/lib/kubelet/kubelet.crt
 cp $CERT_DIR/$HOSTNAME.key /var/lib/kubelet/kubelet.key
-cp $UNIT_DIR/kubelet.service /etc/systemd/system/
+cp $CERT_DIR/$HOSTNAME.crt /var/lib/kubelet/pki/kubelet.crt
+cp $CERT_DIR/$HOSTNAME.key /var/lib/kubelet/pki/kubelet.key
+cp $UNIT_DIR/kubelet.$HOSTNAME.service /etc/systemd/system/kubelet.service
 
 
 # Configure Kubernetes Proxy
+
+## Copy the certificates
+cp $CERT_DIR/{ca.crt,kube-proxy.crt,kube-proxy.key} /var/lib/kubernetes/pki/
+chown root:root /var/lib/kubernetes/pki/*
+chmod 600 /var/lib/kubernetes/pki/*
+
+## Copy the kube-proxy configuration files
 cp $CONFIG_DIR/kube-proxy-config.yaml $KUBECONFIG_DIR/kube-proxy.kubeconfig /var/lib/kube-proxy/
 cp $UNIT_DIR/kube-proxy.service /etc/systemd/system/
 

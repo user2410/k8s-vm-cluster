@@ -93,6 +93,17 @@ done
 kubectl cluster-info \
   --kubeconfig $KUBECONFIG_DIR/admin.kubeconfig
 
+# TLS Bootstrap
+## Generate a random token ID and secret
+kubectl create -f $(ls $CONFIG_DIR/bootstrap-token-*.yaml) --kubeconfig $KUBECONFIG_DIR/admin.kubeconfig
+## Authorize nodes (kubelets) to create CSR
+kubectl create -f $CONFIG_DIR/csrs-for-bootstrapping.yaml --kubeconfig $KUBECONFIG_DIR/admin.kubeconfig
+## Approve all CSRs created by kubelets during TLS bootstrap for the group "system:bootstrappers"
+kubectl create -f $CONFIG_DIR/auto-approve-csrs-for-group.yaml --kubeconfig $KUBECONFIG_DIR/admin.kubeconfig
+## Authorize nodes (kubelets) to Auto Renew Certificates on expiration. Allows renewal of kubelet’s client certificate (used when a node rotates its credentials).
+kubectl create -f $CONFIG_DIR/auto-approve-renewals-for-nodes.yaml --kubeconfig $KUBECONFIG_DIR/admin.kubeconfig
+## This binds the system:nodes group to a ClusterRole that allows approval of CSRs with the kubernetes.io/kubelet-serving signer.
+kubectl create -f $CONFIG_DIR/auto-approve-kubelet-serving-csrs.yaml --kubeconfig $KUBECONFIG_DIR/admin.kubeconfig
 
 ## RBAC for Kubelet Authorization
 ## Configure RBAC permissions to allow the Kubernetes API Server to access the Kubelet API on each worker node. 

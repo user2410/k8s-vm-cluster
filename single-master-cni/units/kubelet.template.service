@@ -6,11 +6,13 @@ Requires=containerd.service
 
 [Service]
 ExecStart=/usr/local/bin/kubelet \
+--bootstrap-kubeconfig="/var/lib/kubelet/tls-bootstrap.kubeconfig" \
 --config=/var/lib/kubelet/kubelet-config.yaml \
 --container-runtime-endpoint=unix:///var/run/containerd/containerd.sock \
 --kubeconfig=/var/lib/kubelet/kubeconfig \
 --register-node=true \
 --fail-swap-on=false \
+--node-ip={PRIMARY_IP} \
 --v=2
 Restart=on-failure
 RestartSec=5

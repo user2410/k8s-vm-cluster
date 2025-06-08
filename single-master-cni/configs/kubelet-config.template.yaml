@@ -1,6 +1,5 @@
 kind: KubeletConfiguration
 apiVersion: kubelet.config.k8s.io/v1beta1
-address: "0.0.0.0"
 authentication:
   anonymous:
     enabled: false
@@ -11,6 +10,9 @@ authentication:
 authorization:
   mode: Webhook
 cgroupDriver: systemd
+clusterDomain: "cluster.local"
+clusterDNS:
+  - {CLUSTER_DNS}
 containerRuntimeEndpoint: "unix:///var/run/containerd/containerd.sock"
 enableServer: true
 failSwapOn: false
@@ -20,6 +22,7 @@ memorySwap:
 port: 10250
 resolvConf: "/etc/resolv.conf"
 registerNode: true
+resolvConf: /run/systemd/resolve/resolv.conf
+rotateCertificates: true
 runtimeRequestTimeout: "15m"
-tlsCertFile: "/var/lib/kubelet/kubelet.crt"
-tlsPrivateKeyFile: "/var/lib/kubelet/kubelet.key"
+serverTLSBootstrap: true

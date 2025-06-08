@@ -9,7 +9,6 @@ tasks:
     cmds:
       - vagrant up
       - vagrant global-status
-      - task: register-hosts
   
   start:single:
     desc: "Build / Turn on a single VM for K8s cluster"
@@ -58,9 +57,8 @@ tasks:
       - |
         ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
           vagrant@{{.MASTER_IP}} "sudo chmod +x {{.SCRIPT_DST_DIR}}/etcd.sh && sudo {{.SCRIPT_DST_DIR}}/etcd.sh"
-
-        sleep 1
-
+      - sleep 1
+      - |
         ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
           vagrant@{{.MASTER_IP}} "sudo chmod +x {{.SCRIPT_DST_DIR}}/k8s-master.sh && sudo {{.SCRIPT_DST_DIR}}/k8s-master.sh"
   
@@ -71,9 +69,7 @@ tasks:
           HOSTNAME="worker$i"
           echo "Running installation scripts on $HOSTNAME..."
 
-          echo "Extracting variable..."
           WORKER_IP=$(awk -v hostname="$HOSTNAME" '$2 == hostname {print $1}' ./machines.txt)
-          echo "Extracted WORKER_IP: $WORKER_IP"
 
           ssh {{.SSH_PARAMS}} -i .vagrant/machines/$HOSTNAME/virtualbox/private_key \
             vagrant@$WORKER_IP "sudo chmod +x {{.SCRIPT_DST_DIR}}/k8s-worker.sh && sudo {{.SCRIPT_DST_DIR}}/k8s-worker.sh"

@@ -18,13 +18,13 @@ tasks:
       - task: dist:master
         vars: { FILE_PATH: '{{.KUBECONFIG_PATH}}/{kube-controller-manager.kubeconfig,kube-scheduler.kubeconfig,admin.kubeconfig}', DEST_PATH: '{{.KUBECONFIG_DST_DIR}}' }
       - task: dist:master
-        vars: { FILE_PATH: '{{.CONFIG_PATH}}/{encryption-config.yaml,kube-scheduler.yaml,kube-apiserver-to-kubelet.yaml}', DEST_PATH: '{{.CONFIG_DST_DIR}}' }
+        vars: { FILE_PATH: '{{.CONFIG_PATH}}/{encryption-config.yaml,kube-scheduler.yaml,kube-apiserver-to-kubelet.yaml,csrs-for-bootstrapping.yaml,auto-approve-renewals-for-nodes.yaml,auto-approve-csrs-for-group.yaml,auto-approve-kubelet-serving-csrs.yaml,bootstrap-token-*.yaml}', DEST_PATH: '{{.CONFIG_DST_DIR}}' }
       # Worker nodes
       - task: dist:workers:certs
       - task: dist:workers
-        vars: { FILE_PATH: '{{.UNIT_PATH}}/{containerd.service,kubelet.service,kube-proxy.service}', DEST_PATH: '{{.UNIT_DST_DIR}}' }
+        vars: { FILE_PATH: '{{.UNIT_PATH}}/{containerd.service,kubelet.worker*.service,kube-proxy.service}', DEST_PATH: '{{.UNIT_DST_DIR}}' }
       - task: dist:workers
-        vars: { FILE_PATH: '{{.KUBECONFIG_PATH}}/{worker*.kubeconfig,kube-proxy.kubeconfig}', DEST_PATH: '{{.KUBECONFIG_DST_DIR}}' }
+        vars: { FILE_PATH: '{{.KUBECONFIG_PATH}}/{worker*.kubeconfig,kube-proxy.kubeconfig,tls-bootstrap.kubeconfig}', DEST_PATH: '{{.KUBECONFIG_DST_DIR}}' }
       - task: dist:workers
         vars: { FILE_PATH: '{{.CONFIG_PATH}}/{99-loopback.conf,10-bridge.worker*.conf,kubelet-config.yaml,containerd-config.toml,kube-proxy-config.yaml}', DEST_PATH: '{{.CONFIG_DST_DIR}}' }
 
@@ -81,4 +81,4 @@ tasks:
     desc: "Distribute certificates to all worker VMs"
     cmds:
       - task: dist:workers
-        vars: { FILE_PATH: '{{.CERT_PATH}}/{ca.crt,worker*.crt,worker*.key}', DEST_PATH: '{{.CERT_DST_DIR}}' }
+        vars: { FILE_PATH: '{{.CERT_PATH}}/{ca.crt,worker*.crt,worker*.key,kube-proxy.crt,kube-proxy.key}', DEST_PATH: '{{.CERT_DST_DIR}}' }

@@ -13,6 +13,7 @@ ExecStart=/usr/local/bin/kube-apiserver \
   --audit-log-path=/var/log/audit.log \
   --authorization-mode=Node,RBAC \
   --client-ca-file=/var/lib/kubernetes/ca.crt \
+  --enable-bootstrap-token-auth=true \
   --enable-admission-plugins=NamespaceLifecycle,NodeRestriction,LimitRanger,ServiceAccount,DefaultStorageClass,ResourceQuota \
   --etcd-certfile=/var/lib/kubernetes/pki/etcd-server.crt \
   --etcd-keyfile=/var/lib/kubernetes/pki/etcd-server.key \

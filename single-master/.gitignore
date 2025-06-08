@@ -15,12 +15,17 @@ certs/*.csr
 kubeconfigs/*.kubeconfig
 
 configs/kube-proxy-config.yaml
+configs/kubelet-config.yaml
+configs/bootstrap-token-*.yaml
 
 units/kube-apiserver.service
+units/kubelet.service
+units/kubelet.worker*.service
 units/kube-controller-manager.service
 
 .vscode
 
 machines.txt
+bootstrap_token.yaml
 
 configs/10-bridge.worker*.conf

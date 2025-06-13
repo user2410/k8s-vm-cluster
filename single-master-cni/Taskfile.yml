@@ -3,6 +3,7 @@ version: '3'
 vars:
   # General variables
   CLUSTER_NAME: '{{.CLUSTER_NAME | default "k8s-cluster"}}'
+  CNI_PLUGIN: '{{.CNI_PLUGIN | default "Calico"}}'
   WORKER_COUNT:
     sh: |
       if command -v yq >/dev/null 2>&1; then
@@ -76,6 +77,8 @@ tasks:
       - task: vms:bootstrap
       - task: vms:install:master
       - task: vms:install:workers
+      - task: certificates:approve-csrs
+      - task: networking:config:cni
   
   destroy:
     cmds:
@@ -91,5 +94,5 @@ tasks:
         ignore_error: true
       - cmd: rm -f ./scripts/local/{hosts,*.sh}
         ignore_error: true
-      - cmd: rm -f ./machines.txt
+      - cmd: rm -f ./machines.txt ./bootstrap_token.yaml
         ignore_error: true

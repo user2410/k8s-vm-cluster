@@ -127,3 +127,4 @@ tasks:
       - rm -f {{.CONFIG_PATH}}/10-bridge.worker*.conf
       - rm -f {{.UNIT_PATH}}/kube-apiserver.service
       - rm -f {{.UNIT_PATH}}/kube-controller-manager.service
+      - rm -f {{.UNIT_PATH}}/kubelet.worker*.service

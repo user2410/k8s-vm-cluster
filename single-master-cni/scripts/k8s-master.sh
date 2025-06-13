@@ -102,7 +102,8 @@ kubectl create -f $CONFIG_DIR/csrs-for-bootstrapping.yaml --kubeconfig $KUBECONF
 kubectl create -f $CONFIG_DIR/auto-approve-csrs-for-group.yaml --kubeconfig $KUBECONFIG_DIR/admin.kubeconfig
 ## Authorize nodes (kubelets) to Auto Renew Certificates on expiration
 kubectl create -f $CONFIG_DIR/auto-approve-renewals-for-nodes.yaml --kubeconfig $KUBECONFIG_DIR/admin.kubeconfig
-
+## This binds the system:nodes group to a ClusterRole that allows approval of CSRs with the kubernetes.io/kubelet-serving signer.
+kubectl create -f $CONFIG_DIR/auto-approve-kubelet-serving-csrs.yaml --kubeconfig $KUBECONFIG_DIR/admin.kubeconfig
 
 ## RBAC for Kubelet Authorization
 ## Configure RBAC permissions to allow Kubernetes API Server to access Kubelet API on each worker node. 

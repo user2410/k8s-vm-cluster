@@ -72,9 +72,27 @@ tasks:
           sed "s#{CLUSTER_DNS}#{{.CLUSTER_DNS}}#g" {{.CONFIG_PATH}}/kubelet-config.template.yaml > {{.CONFIG_PATH}}/kubelet-config.yaml
         done
   
+  config:cni:
+    desc: "Install CNI plugin and CoreDNS"
+    vars:
+      MASTER_IP:
+        sh: |
+          {{.MASTER_IP_CMD}}
+      POD_CIDR:
+        sh: |
+          {{.POD_CIDR_CMD}}
+      SERVICE_CIDR:
+        sh: |
+          {{.SERVICE_CIDR_CMD}}
+    cmds:
+      - |
+        ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
+          vagrant@{{.MASTER_IP}} "sudo chmod +x {{.SCRIPT_DST_DIR}}/networking.sh && sudo {{.SCRIPT_DST_DIR}}/networking.sh {{.CNI_PLUGIN}} {{.POD_CIDR}} {{.SERVICE_CIDR}}"
+
   clean:
     desc: "Clean up networking configuration"
     cmds:
       - rm -f ./configs/kube-proxy-config.yaml
       - rm -f {{.UNIT_PATH}}/kube-apiserver.service
       - rm -f {{.UNIT_PATH}}/kube-controller-manager.service
+      - rm -f {{.UNIT_PATH}}/kubelet.worker*.service

@@ -53,6 +53,12 @@ tasks:
       MASTER_IP:
         sh: |
           {{.MASTER_IP_CMD}}
+      POD_CIDR:
+        sh: |
+          {{.POD_CIDR_CMD}}
+      SERVICE_CIDR:
+        sh: |
+          {{.SERVICE_CIDR_CMD}}
     cmds:
       - |
         ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
@@ -61,7 +67,7 @@ tasks:
       - | 
         ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
           vagrant@{{.MASTER_IP}} "sudo chmod +x {{.SCRIPT_DST_DIR}}/k8s-master.sh && sudo {{.SCRIPT_DST_DIR}}/k8s-master.sh"
-  
+
   install:workers:
     cmds:
       - |

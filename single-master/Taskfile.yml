@@ -91,5 +91,5 @@ tasks:
         ignore_error: true
       - cmd: rm -f ./scripts/local/{hosts,*.sh}
         ignore_error: true
-      - cmd: rm -f ./machines.txt
+      - cmd: rm -f ./machines.txt ./bootstrap_token.yaml
         ignore_error: true

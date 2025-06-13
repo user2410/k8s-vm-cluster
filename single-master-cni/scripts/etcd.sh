@@ -2,7 +2,7 @@
 
 set -eux
 
-ETCD_VER=v3.6.0-rc.5
+ETCD_VER=v3.6.1
 ARCH=$(dpkg --print-architecture)
 
 HOME_CONFIG=/home/vagrant/k8sconfigs

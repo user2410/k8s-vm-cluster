@@ -13,7 +13,7 @@ tasks:
       POD_CIDR:
         sh: |
           {{.POD_CIDR_CMD}}
-      CERT_COMPONENTS: "admin kube-proxy kube-scheduler kube-controller-manager kube-api-server etcd service-accounts"
+      CERT_COMPONENTS: "admin kube-proxy kube-scheduler kube-controller-manager kube-api-server etcd service-accounts{{.WORKER_HOSTS}}"
     status:
       - test -f ./machines.txt
       - |
@@ -32,6 +32,30 @@ tasks:
 
         echo "Generating certificates config file..."
         sed -e "s/{MASTER_IP}/{{.MASTER_IP}}/g" -e "s/{MASTER_FQDN}/{{.MASTER_FQDN}}/g" -e "s/{POD_CIDR_FIRST_IP}/$FIRST_IP/g" ca.conf > /tmp/ca.conf
+        for i in $(seq 1 {{.WORKER_COUNT}}); do
+          echo "
+          [worker${i}]
+          distinguished_name = worker${i}_distinguished_name
+          prompt             = no
+          req_extensions     = worker${i}_req_extensions
+
+          [worker${i}_req_extensions]
+          basicConstraints     = CA:FALSE
+          extendedKeyUsage     = clientAuth, serverAuth
+          keyUsage             = critical, digitalSignature, keyEncipherment
+          nsCertType           = client
+          nsComment            = "worker${i} certificate"
+          subjectAltName       = DNS:worker${i}, IP:127.0.0.1
+          subjectKeyIdentifier = hash
+
+          [worker${i}_distinguished_name]
+          CN = system:node:worker${i}
+          O  = system:nodes
+          C  = US
+          ST = Washington
+          L  = Seattle
+          " >> /tmp/ca.conf
+        done
       - |
         echo "# Create CA on Host"
         echo "## Create the CA Private Key"

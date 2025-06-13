@@ -33,7 +33,7 @@ modprobe br_netfilter
 systemctl restart systemd-modules-load.service
 
 ## Set network tunables
-cat <<EOF >> /etc/sysctl.d/kubernetes.conf
+cat <<EOF | sudo tee /etc/sysctl.d/99-kubernetes.conf
 net.ipv6.conf.all.disable_ipv6      = 1
 net.ipv6.conf.default.disable_ipv6  = 1
 net.ipv6.conf.lo.disable_ipv6       = 1
@@ -44,13 +44,14 @@ EOF
 
 ## Apply sysctl params without reboot
 sysctl --system
-echo "...done..."
 
-# Point to Google's DNS server
-sed -i -e 's/#DNS=/DNS=8.8.8.8/' /etc/systemd/resolved.conf
+# Restart systemd-resolved service
 service systemd-resolved restart
 
 # Disable swap
 sed -i '/swap/d' /etc/fstab
 swapoff -a
-echo "...done..."
+
+# Stop and disable AppArmor
+systemctl stop apparmor
+systemctl disable apparmor

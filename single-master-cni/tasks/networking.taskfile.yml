@@ -13,6 +13,39 @@ tasks:
       - task: config:kube-controller-manager
       - task: config:kubelet
 
+  config:pod-networking:
+    desc: |
+      1) On the master node, add a route to each worker subnet  
+      2) On each worker node, add routes to every *other* worker subnet
+    vars:
+      MASTER_IP:
+        sh: |
+          {{.MASTER_IP_CMD}}
+    cmds:
+      # For each worker node, add a route to the worker subnet on the master node
+      - |
+        for i in $(seq 1 {{.WORKER_COUNT}}); do
+          WORKER_IP=$(awk -v idx=$i '$2 == "worker"idx {print $1}' ./machines.txt)
+          WORKER_SUBNET=$(awk -v idx=$i '$2 == "worker"idx {print $4}' ./machines.txt)
+          echo "Adding route to worker subnet $WORKER_SUBNET on master node..."
+          ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
+            vagrant@{{.MASTER_IP}} "sudo ip route add $WORKER_SUBNET via $WORKER_IP"
+        done
+      # For each worker node, add routes to every *other* worker subnet
+      - |
+        for i in $(seq 1 {{.WORKER_COUNT}}); do
+          for j in $(seq 1 {{.WORKER_COUNT}}); do
+            if [ $i -ne $j ]; then
+              WORKERI_IP=$(awk -v idx=$i '$2 == "worker"idx {print $1}' ./machines.txt)
+              WORKERJ_IP=$(awk -v idx=$j '$2 == "worker"idx {print $1}' ./machines.txt)
+              WORKERJ_SUBNET=$(awk -v idx=$j '$2 == "worker"idx {print $4}' ./machines.txt)
+              echo "Adding route to worker$j subnet $WORKERJ_SUBNET on worker$i..."
+              ssh {{.SSH_PARAMS}} -i .vagrant/machines/worker$i/virtualbox/private_key \
+                vagrant@$WORKERI_IP "sudo ip route add $WORKERJ_SUBNET via $WORKERJ_IP"
+            fi
+          done
+        done
+
   config:kube-proxy:
     desc: "Configure kube-proxy"
     vars:
@@ -87,7 +120,7 @@ tasks:
     cmds:
       - |
         ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
-          vagrant@{{.MASTER_IP}} "sudo chmod +x {{.SCRIPT_DST_DIR}}/networking.sh && sudo {{.SCRIPT_DST_DIR}}/networking.sh {{.CNI_PLUGIN}} {{.POD_CIDR}} {{.SERVICE_CIDR}}"
+          vagrant@{{.MASTER_IP}} "sudo chmod +x {{.SCRIPT_DST_DIR}}/cni_coredns.sh && sudo {{.SCRIPT_DST_DIR}}/cni_coredns.sh {{.CNI_PLUGIN}} {{.POD_CIDR}} {{.SERVICE_CIDR}}"
 
   clean:
     desc: "Clean up networking configuration"

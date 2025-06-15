@@ -10,6 +10,19 @@ CONFIG_DIR=$HOME_CONFIG/configs
 KUBECONFIG_DIR=$HOME_CONFIG/kubeconfigs
 UNIT_DIR=$HOME_CONFIG/units
 
+# Arguments:
+# $1 - Pod CIDR
+# $2 - Service CIDR
+POD_CIDR=$1
+SERVICE_CIDR=$2
+
+if [ -z "$POD_CIDR" ]; then
+  POD_CIDR="10.244.0.0/16"
+fi
+
+if [ -z "$SERVICE_CIDR" ]; then
+  SERVICE_CIDR="10.252.0.0/16"
+fi
 
 # Install Kubernetes components
 
@@ -36,6 +49,19 @@ mkdir -p /etc/kubernetes/config /var/lib/kubernetes/pki /var/lib/kubernetes/
 ## Configure Kubernetes API Server
 cp $CERT_DIR/{ca.crt,ca.key,kube-api-server.key,kube-api-server.crt,service-accounts.key,service-accounts.crt,etcd.crt,etcd.key} \
   /var/lib/kubernetes/
+
+
+## Add a route to service CIDR
+### Add route immediately
+ip route add $SERVICE_CIDR dev lo
+### Configure persistent route
+if [ -f /etc/debian_version ]; then
+  PERSIST_FILE="/etc/network/interfaces.d/route-lo"
+  echo -e "auto lo\niface lo inet loopback\n    post-up ip route add $SERVICE_CIDR dev lo" > $PERSIST_FILE
+elif [ -f /etc/redhat-release ] || [ -f /etc/fedora-release ]; then
+  ROUTE_FILE="/etc/sysconfig/network-scripts/route-lo"
+  echo "$SERVICE_CIDR dev lo" > $ROUTE_FILE
+fi
 
 ### Generate a random encryption key
 ENCRYPTION_KEY=$(head -c 32 /dev/urandom | base64)

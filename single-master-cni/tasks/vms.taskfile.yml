@@ -66,9 +66,16 @@ tasks:
       - sleep 1
       - | 
         ssh {{.SSH_PARAMS}} -i .vagrant/machines/master/virtualbox/private_key \
-          vagrant@{{.MASTER_IP}} "sudo chmod +x {{.SCRIPT_DST_DIR}}/k8s-master.sh && sudo {{.SCRIPT_DST_DIR}}/k8s-master.sh"
+          vagrant@{{.MASTER_IP}} "sudo chmod +x {{.SCRIPT_DST_DIR}}/k8s-master.sh && sudo {{.SCRIPT_DST_DIR}}/k8s-master.sh {{.POD_CIDR}} {{.SERVICE_CIDR}}"
 
   install:workers:
+    vars:
+      POD_CIDR:
+        sh: |
+          {{.POD_CIDR_CMD}}
+      SERVICE_CIDR:
+        sh: |
+          {{.SERVICE_CIDR_CMD}}
     cmds:
       - |
         for i in $(seq 1 {{.WORKER_COUNT}}); do
@@ -78,7 +85,7 @@ tasks:
           WORKER_IP=$(awk -v hostname="$HOSTNAME" '$2 == hostname {print $1}' ./machines.txt)
 
           ssh {{.SSH_PARAMS}} -i .vagrant/machines/$HOSTNAME/virtualbox/private_key \
-            vagrant@$WORKER_IP "sudo chmod +x {{.SCRIPT_DST_DIR}}/k8s-worker.sh && sudo {{.SCRIPT_DST_DIR}}/k8s-worker.sh"
+            vagrant@$WORKER_IP "sudo chmod +x {{.SCRIPT_DST_DIR}}/k8s-worker.sh && sudo {{.SCRIPT_DST_DIR}}/k8s-worker.sh {{.POD_CIDR}} {{.SERVICE_CIDR}}"
         done
 
   suspend:all:

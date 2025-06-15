@@ -8,7 +8,7 @@ tasks:
       - task: dist:hosts-file
       # Script files
       - task: dist:master
-        vars: { FILE_PATH: '{{.SCRIPT_PATH}}/{bootstrap.sh,k8s-master.sh,etcd.sh,networking.sh}', DEST_PATH: '{{.SCRIPT_DST_DIR}}' }
+        vars: { FILE_PATH: '{{.SCRIPT_PATH}}/{bootstrap.sh,k8s-master.sh,etcd.sh,cni_coredns.sh}', DEST_PATH: '{{.SCRIPT_DST_DIR}}' }
       - task: dist:workers
         vars: { FILE_PATH: '{{.SCRIPT_PATH}}/{bootstrap.sh,k8s-worker.sh}', DEST_PATH: '{{.SCRIPT_DST_DIR}}' }
       # Master node

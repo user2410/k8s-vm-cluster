@@ -2,6 +2,20 @@
 
 set -eux
 
+# Arguments:
+# $1 - Pod CIDR
+# $2 - Service CIDR
+POD_CIDR=$1
+SERVICE_CIDR=$2
+
+if [ -z "$POD_CIDR" ]; then
+  POD_CIDR="10.244.0.0/16"
+fi
+
+if [ -z "$SERVICE_CIDR" ]; then
+  SERVICE_CIDR="10.252.0.0/16"
+fi
+
 ARCH=$(dpkg --print-architecture)
 HOME_CONFIG=/home/vagrant/k8sconfigs
 CERT_DIR=$HOME_CONFIG/certs
@@ -10,6 +24,11 @@ KUBECONFIG_DIR=$HOME_CONFIG/kubeconfigs
 UNIT_DIR=$HOME_CONFIG/units
 
 # Install the OS dependencies
+# socat: NECESSARY - Used by Kubernetes for port forwarding functionality and some networking operations.
+# conntrack: NECESSARY - Required for connection tracking in iptables, which kube-proxy uses for service implementation.
+# ipvsadm: OPTIONAL - Only needed if you're using IPVS mode for kube-proxy (your config uses iptables mode).
+# ipset: NECESSARY - Used by kube-proxy for efficient IP address management in iptables rules.
+# kmod: NECESSARY - Required for loading kernel modules like br_netfilter, which is essential for container networking.
 if [ -f /etc/debian_version ]; then
   apt-get update
   apt-get -y install socat conntrack ipvsadm ipset kmod
@@ -101,15 +120,33 @@ chmod +x /bin/{containerd,containerd-shim-runc-v2,containerd-stress}
 
 # Configure the CNI plugin
 
+## Add a route for the service CIDR
+
+### IMPORTANT: Tell the Linux kernel that traffic destined 
+### for the service CIDR should be handled locally. This 
+### allows kube-proxy's iptables rules to intercept and 
+### redirect this traffic to the appropriate destinations.
+
+### Add route immediately
+ip route add $SERVICE_CIDR dev lo
+### Configure persistent route
+if [ -f /etc/debian_version ]; then
+  PERSIST_FILE="/etc/network/interfaces.d/route-lo"
+  echo -e "auto lo\niface lo inet loopback\n    post-up ip route add $SERVICE_CIDR dev lo" > $PERSIST_FILE
+elif [ -f /etc/redhat-release ] || [ -f /etc/fedora-release ]; then
+  ROUTE_FILE="/etc/sysconfig/network-scripts/route-lo"
+  echo "$SERVICE_CIDR dev lo" > $ROUTE_FILE
+fi
+
 ## To ensure network traffic crossing the CNI `bridge` network is processed by `iptables`, 
 ## load and configure the `br-netfilter` kernel module
-# modprobe br-netfilter
-# echo "br-netfilter" >> /etc/modules-load.d/modules.conf
-# echo "net.bridge.bridge-nf-call-iptables = 1" \
-#   >> /etc/sysctl.d/kubernetes.conf
-# echo "net.bridge.bridge-nf-call-ip6tables = 1" \
-#   >> /etc/sysctl.d/kubernetes.conf
-# sysctl -p /etc/sysctl.d/kubernetes.conf
+modprobe br-netfilter
+echo "br-netfilter" >> /etc/modules-load.d/modules.conf
+echo "net.bridge.bridge-nf-call-iptables = 1" \
+  >> /etc/sysctl.d/kubernetes.conf
+echo "net.bridge.bridge-nf-call-ip6tables = 1" \
+  >> /etc/sysctl.d/kubernetes.conf
+sysctl -p /etc/sysctl.d/kubernetes.conf
 
 
 # Configure containerd

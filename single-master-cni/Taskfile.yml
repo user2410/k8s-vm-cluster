@@ -79,6 +79,7 @@ tasks:
       - task: vms:install:workers
       - task: certificates:approve-csrs
       - task: networking:config:cni
+      - vagrant reload
   
   destroy:
     cmds:

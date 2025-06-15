@@ -13,6 +13,9 @@ tasks:
       POD_CIDR:
         sh: |
           {{.POD_CIDR_CMD}}
+      SERVICE_CIDR:
+        sh: |
+          {{.SERVICE_CIDR_CMD}}
       CERT_COMPONENTS: "admin kube-proxy kube-scheduler kube-controller-manager kube-api-server etcd service-accounts{{.WORKER_HOSTS}}"
     status:
       - test -f ./machines.txt
@@ -28,10 +31,11 @@ tasks:
         exit 1  # No files found → task is stale → run it
     cmds:
       - |
-        FIRST_IP=$(echo {{.POD_CIDR}} | cut -d '.' -f 1-3).1
+        FIRST_POD_IP=$(echo {{.POD_CIDR}} | cut -d '.' -f 1-3).1
+        FIRST_SERVICE_IP=$(echo {{.SERVICE_CIDR}} | cut -d '.' -f 1-3).1
 
         echo "Generating certificates config file..."
-        sed -e "s/{MASTER_IP}/{{.MASTER_IP}}/g" -e "s/{MASTER_FQDN}/{{.MASTER_FQDN}}/g" -e "s/{POD_CIDR_FIRST_IP}/$FIRST_IP/g" ca.conf > /tmp/ca.conf
+        sed -e "s/{MASTER_IP}/{{.MASTER_IP}}/g" -e "s/{MASTER_FQDN}/{{.MASTER_FQDN}}/g" -e "s/{POD_CIDR_FIRST_IP}/$FIRST_POD_IP/g" -e "s/{SERVICE_CIDR_FIRST_IP}/$FIRST_SERVICE_IP/g" ca.conf > /tmp/ca.conf
         for i in $(seq 1 {{.WORKER_COUNT}}); do
           echo "
           [worker${i}]

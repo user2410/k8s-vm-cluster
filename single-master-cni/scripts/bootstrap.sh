@@ -42,7 +42,7 @@ net.bridge.bridge-nf-call-ip6tables = 1
 net.ipv4.ip_forward                 = 1
 EOF
 
-## Apply sysctl params without reboot
+# Apply sysctl settings
 sysctl --system
 
 # Restart systemd-resolved service
@@ -52,6 +52,6 @@ service systemd-resolved restart
 sed -i '/swap/d' /etc/fstab
 swapoff -a
 
-# Stop and disable AppArmor
-systemctl stop apparmor
-systemctl disable apparmor
+# # Stop and disable AppArmor
+# systemctl stop apparmor
+# systemctl disable apparmor
